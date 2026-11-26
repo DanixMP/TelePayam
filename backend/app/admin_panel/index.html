@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'">
+  <title>Admin panel · University Messenger</title>
+  <link rel="stylesheet" href="panel.css">
+  <script type="module" src="panel.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="frame bar-content">
+      <div class="brand">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <path d="M3 4h22v15H12l-6 5v-5H3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M8 9h12M8 14h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>University Messenger</span>
+      </div>
+      <span class="area-name">Admin panel</span>
+      <button type="button" id="sign-out" class="bar-action" hidden>Sign out</button>
+    </div>
+  </header>
+
+  <main class="frame">
+    <noscript><p>Enable JavaScript to sign in and review student requests.</p></noscript>
+    <section id="sign-in" class="auth-layout" aria-labelledby="sign-in-title">
+      <div class="auth-intro">
+        <h1 id="sign-in-title">Admin sign-in</h1>
+        <p>Sign in to review student registrations and grant access to University Messenger.</p>
+        <ol class="steps" aria-label="Sign-in progress">
+          <li id="phone-step" aria-current="step">Phone number</li>
+          <li id="codes-step">Verification</li>
+        </ol>
+      </div>
+      <div class="auth-fields">
+        <form id="phone-form" method="post">
+          <label for="phone">Admin mobile number</label>
+          <input id="phone" name="phone" type="tel" inputmode="tel" dir="ltr" autocomplete="tel" maxlength="24" required aria-describedby="phone-hint">
+          <p id="phone-hint" class="hint">Use the Iranian mobile number registered to your admin account.</p>
+          <button type="submit" class="primary">Send SMS code</button>
+        </form>
+        <form id="code-form" method="post" hidden>
+          <p class="destination">Verify <bdi id="destination" dir="ltr"></bdi></p>
+          <label for="sms">SMS code</label>
+          <input id="sms" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" dir="ltr" autocomplete="one-time-code" required>
+          <p id="dev-code" class="hint" hidden></p>
+          <button type="submit" class="primary">Sign in</button>
+          <div class="form-actions">
+            <button type="button" id="resend" class="text-action">Send a new SMS code</button>
+            <button type="button" id="change-phone" class="text-action">Change number</button>
+          </div>
+        </form>
+      </div>
+    </section>
+    <div id="feedback">
+      <p id="status" class="notice" role="status" aria-live="polite"></p>
+      <p id="error" class="notice error" role="alert"></p>
+    </div>
+
+    <section id="queue" aria-labelledby="queue-title" hidden>
+      <div class="page-heading">
+        <div>
+          <h1 id="queue-title" tabindex="-1">Student requests</h1>
+          <p>Review each registration. Approving it activates the student’s account.</p>
+        </div>
+        <button type="button" id="refresh" class="secondary">Refresh list</button>
+      </div>
+      <details id="manage-admins" hidden>
+        <summary>Add admin</summary>
+        <form id="add-admin-form" method="post">
+          <label for="new-admin-phone">New admin’s mobile number</label>
+          <input id="new-admin-phone" type="tel" dir="ltr" autocomplete="off" maxlength="32" required aria-describedby="new-admin-hint">
+          <p id="new-admin-hint" class="hint">Use an unregistered number. This admin can review students but cannot add other admins.</p>
+          <button type="submit" class="primary">Create admin</button>
+        </form>
+      </details>
+      <div class="queue-surface">
+        <h2>Awaiting review <span id="count" class="count" hidden></span></h2>
+        <p id="queue-state" class="queue-state">Loading registrations…</p>
+        <table id="requests" hidden>
+          <caption class="visually-hidden">Student registrations awaiting approval, oldest first</caption>
+          <thead>
+            <tr><th scope="col">Student</th><th scope="col">Program</th><th scope="col">National ID</th><th scope="col"><span class="visually-hidden">Action</span></th></tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <template id="request-row">
+    <tr>
+      <th scope="row" tabindex="-1"><bdi class="student-name"></bdi><span class="detail">University ID: <bdi class="university-id" dir="ltr"></bdi></span></th>
+      <td><bdi class="department"></bdi><span class="detail degree"></span></td>
+      <td><span class="mobile-label">National ID: </span><bdi class="national-id" dir="ltr"></bdi></td>
+      <td class="row-action"><button type="button" class="primary approve">Approve</button></td>
+    </tr>
+  </template>
+</body>
+</html>

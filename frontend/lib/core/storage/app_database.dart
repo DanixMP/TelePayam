@@ -1,0 +1,234 @@
+import 'package:drift/drift.dart';
+import 'package:university_messenger/core/storage/database_connection.dart';
+
+part 'app_database.g.dart';
+
+class CachedUsers extends Table {
+  TextColumn get id => text()();
+  TextColumn get firstName => text().nullable()();
+  TextColumn get lastName => text().nullable()();
+  TextColumn get handle => text().nullable()();
+  TextColumn get phone => text()();
+  TextColumn get role => text()();
+  TextColumn get status => text()();
+  TextColumn get avatarId => text().nullable()();
+  TextColumn get bio => text().nullable()();
+  TextColumn get correctionNote => text().nullable()();
+  IntColumn get updatedAt => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class Conversations extends Table {
+  TextColumn get id => text()();
+  TextColumn get avatarId => text().nullable()();
+  TextColumn get type => text()();
+  TextColumn get title => text().nullable()();
+  TextColumn get handle => text().nullable()();
+  TextColumn get description => text().nullable()();
+  TextColumn get visibility => text().withDefault(const Constant('private'))();
+  TextColumn get ownerId => text()();
+  TextColumn get myRole => text().nullable()();
+  IntColumn get memberCount => integer().withDefault(const Constant(0))();
+  IntColumn get lastSequence => integer().withDefault(const Constant(0))();
+  IntColumn get lastReadSequence => integer().withDefault(const Constant(0))();
+  TextColumn get lastMessageBody => text().nullable()();
+  IntColumn get lastMessageAt => integer().nullable()();
+  BoolColumn get isProfessorChannel =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get underReview => boolean().withDefault(const Constant(false))();
+  IntColumn get updatedAt => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class Members extends Table {
+  TextColumn get conversationId => text()();
+  TextColumn get userId => text()();
+  TextColumn get role => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {conversationId, userId};
+}
+
+@TableIndex(
+  name: 'messages_conversation_sequence',
+  columns: {#conversationId, #sequence},
+)
+class Messages extends Table {
+  TextColumn get id => text()();
+  TextColumn get conversationId => text()();
+  IntColumn get sequence => integer().nullable()();
+  TextColumn get senderId => text()();
+  TextColumn get clientMessageId => text().nullable()();
+  TextColumn get type => text().withDefault(const Constant('text'))();
+  TextColumn get body => text().nullable()();
+  TextColumn get status => text()();
+  TextColumn get replyToId => text().nullable()();
+  TextColumn get entities => text().withDefault(const Constant('[]'))();
+  TextColumn get forwardFrom => text().nullable()();
+  TextColumn get attachmentIds => text().withDefault(const Constant('[]'))();
+  TextColumn get reactionCounts => text().withDefault(const Constant('{}'))();
+  TextColumn get poll => text().nullable()();
+  BoolColumn get silent => boolean().withDefault(const Constant(false))();
+  IntColumn get editedAt => integer().nullable()();
+  IntColumn get deletedAt => integer().nullable()();
+  IntColumn get createdAt => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class MessageMedia extends Table {
+  TextColumn get id => text()();
+  TextColumn get messageId => text()();
+  TextColumn get kind => text()();
+  TextColumn get remoteUrl => text().nullable()();
+  TextColumn get localPath => text().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class Reactions extends Table {
+  TextColumn get messageId => text()();
+  TextColumn get userId => text()();
+  TextColumn get emoji => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {messageId, userId, emoji};
+}
+
+class Drafts extends Table {
+  TextColumn get conversationId => text()();
+  TextColumn get body => text()();
+  IntColumn get updatedAt => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {conversationId};
+}
+
+class Outbox extends Table {
+  TextColumn get clientMessageId => text()();
+  TextColumn get conversationId => text()();
+  TextColumn get payload => text()();
+  IntColumn get attempts => integer().withDefault(const Constant(0))();
+  TextColumn get lastError => text().nullable()();
+  IntColumn get createdAt => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {clientMessageId};
+}
+
+class StickerPacks extends Table {
+  TextColumn get id => text()();
+  TextColumn get title => text()();
+  BoolColumn get installed => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class Stickers extends Table {
+  TextColumn get id => text()();
+  TextColumn get packId => text()();
+  TextColumn get emoji => text().nullable()();
+  TextColumn get localPath => text().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class SavedGifs extends Table {
+  TextColumn get id => text()();
+  TextColumn get remoteUrl => text()();
+  IntColumn get savedAt => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class ServiceRequests extends Table {
+  TextColumn get id => text()();
+  TextColumn get serviceType => text()();
+  TextColumn get status => text()();
+  TextColumn get payload => text()();
+  IntColumn get updatedAt => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class AppSettings extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {key};
+}
+
+class SyncCursors extends Table {
+  TextColumn get scope => text()();
+  IntColumn get sequence => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {scope};
+}
+
+@DriftDatabase(
+  tables: [
+    CachedUsers,
+    Conversations,
+    Members,
+    Messages,
+    MessageMedia,
+    Reactions,
+    Drafts,
+    Outbox,
+    StickerPacks,
+    Stickers,
+    SavedGifs,
+    ServiceRequests,
+    AppSettings,
+    SyncCursors,
+  ],
+)
+class AppDatabase extends _$AppDatabase {
+  AppDatabase([QueryExecutor? executor]) : super(executor ?? openAppDatabase());
+
+  @override
+  int get schemaVersion => 4;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (migrator) => migrator.createAll(),
+    onUpgrade: (migrator, from, to) async {
+      if (from < 2) {
+        // Phase 1 had no chat UI, so replacing its empty chat tables is safer
+        // than carrying an incompatible optimistic-message primary key forward.
+        await migrator.deleteTable('outbox');
+        await migrator.deleteTable('messages');
+        await migrator.deleteTable('conversations');
+        await migrator.createTable(conversations);
+        await migrator.createTable(messages);
+        await migrator.createTable(outbox);
+      }
+      if (from == 2) {
+        await migrator.addColumn(conversations, conversations.description);
+        await migrator.addColumn(conversations, conversations.visibility);
+        await migrator.addColumn(conversations, conversations.underReview);
+        await migrator.addColumn(messages, messages.entities);
+        await migrator.addColumn(messages, messages.forwardFrom);
+        await migrator.addColumn(messages, messages.attachmentIds);
+        await migrator.addColumn(messages, messages.reactionCounts);
+        await migrator.addColumn(messages, messages.poll);
+        await migrator.addColumn(messages, messages.silent);
+      }
+      if (from >= 2 && from < 4) {
+        await migrator.addColumn(conversations, conversations.avatarId);
+      }
+    },
+  );
+}

@@ -1,0 +1,4 @@
+sql-wasm.js and sql-wasm.wasm are the unmodified browser build of sql.js 1.8.0.
+Source: https://registry.npmjs.org/sql.js/-/sql.js-1.8.0.tgz (package/dist/)
+Package integrity: sha512-3HD8pSkZL+5YvYUI8nlvNILs61ALqq34xgmF+BHpqxe68yZIJ1H+sIVIODvni25+CcxHUxDyrTJUL0lE/m7afw==
+The distribution's original license is included alongside these files.

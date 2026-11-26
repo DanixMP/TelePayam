@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "platform": "adaptive",
+  "source": "DESIGN.md",
+  "tokens": {
+    "color": {
+      "primaryLight": "#1769AA",
+      "primaryDark": "#70BAF2",
+      "heroLight": "#1769AA",
+      "heroDark": "#0D4775",
+      "navyLight": "#153B61",
+      "navyDark": "#8ABBE0",
+      "successLight": "#16885A",
+      "successDark": "#72D6A1"
+    },
+    "radius": {
+      "control": 14,
+      "surface": 16,
+      "authSheet": 28,
+      "bubble": 16,
+      "bubbleTail": 4
+    },
+    "spacing": {
+      "page": 24,
+      "list": 14,
+      "minimumTarget": 48,
+      "desktopChatList": 390
+    },
+    "breakpoint": {
+      "authenticationWide": 840,
+      "chatWide": 900
+    }
+  }
+}

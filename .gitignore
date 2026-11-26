@@ -1,0 +1,31 @@
+# OS and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.db
+*.sqlite3
+
+# Local environment
+backend/.env
+
+# Runtime data
+backend/var/
+
+# Flutter / Dart
+frontend/.dart_tool/
+frontend/build/
+frontend/coverage/
+frontend/.flutter-plugins-dependencies
+
+# Flutter Android build output
+frontend/android/build/

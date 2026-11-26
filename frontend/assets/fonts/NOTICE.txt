@@ -1,0 +1,1 @@
+Vazirmatn Regular and Bold, version 33.003, from the vazirmatn 33.0.3 npm distribution (fonts/ttf). These unmodified fonts support Persian and Latin text without an external font service. See OFL.txt for the original license.
