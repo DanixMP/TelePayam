@@ -5,6 +5,7 @@ import 'package:university_messenger/features/reports/data/reports_api.dart';
 import 'package:university_messenger/features/reports/domain/report_models.dart';
 import 'package:university_messenger/features/reports/presentation/report_ui.dart';
 import 'package:university_messenger/features/reports/report_strings.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class MyReportsScreen extends ConsumerStatefulWidget {
   const MyReportsScreen({super.key});
@@ -15,7 +16,7 @@ class MyReportsScreen extends ConsumerStatefulWidget {
 
 class _MyReportsScreenState extends ConsumerState<MyReportsScreen> {
   List<ReportRecord>? _reports;
-  String? _error;
+  Object? _error;
   bool _loading = true;
 
   @override
@@ -43,7 +44,7 @@ class _MyReportsScreenState extends ConsumerState<MyReportsScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = reportErrorText(error);
+        _error = error;
         _loading = false;
       });
     }
@@ -52,23 +53,24 @@ class _MyReportsScreenState extends ConsumerState<MyReportsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text(ReportStrings.myReportsTitle),
+      title: Text(context.l10n.reportMyReportsTitle),
       actions: [
         IconButton(
           onPressed: _loading ? null : _load,
-          tooltip: ReportStrings.refresh,
+          tooltip: context.l10n.refresh,
           icon: const Icon(Icons.refresh_rounded),
         ),
       ],
     ),
-    body: SafeArea(child: _buildBody()),
+    body: SafeArea(child: _buildBody(context)),
   );
 
-  Widget _buildBody() {
+  Widget _buildBody(BuildContext context) {
+    final l10n = context.l10n;
     if (_loading && _reports == null) {
       return Center(
         child: Semantics(
-          label: ReportStrings.loadingReports,
+          label: l10n.reportLoadingReports,
           child: const CircularProgressIndicator(),
         ),
       );
@@ -79,17 +81,20 @@ class _MyReportsScreenState extends ConsumerState<MyReportsScreen> {
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
-            child: ReportErrorPanel(message: _error!, onRetry: _load),
+            child: ReportErrorPanel(
+              message: reportErrorText(l10n, _error!),
+              onRetry: _load,
+            ),
           ),
         ),
       );
     }
     final reports = _reports ?? const <ReportRecord>[];
     if (reports.isEmpty) {
-      return const ReportEmptyState(
+      return ReportEmptyState(
         icon: Icons.outlined_flag_rounded,
-        title: ReportStrings.noReportsTitle,
-        body: ReportStrings.noReportsBody,
+        title: l10n.reportNoReportsTitle,
+        body: l10n.reportNoReportsBody,
       );
     }
     return RefreshIndicator(
@@ -100,7 +105,10 @@ class _MyReportsScreenState extends ConsumerState<MyReportsScreen> {
         separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           if (_error != null && index == 0) {
-            return ReportErrorPanel(message: _error!, onRetry: _load);
+            return ReportErrorPanel(
+              message: reportErrorText(l10n, _error!),
+              onRetry: _load,
+            );
           }
           final reportIndex = index - (_error == null ? 0 : 1);
           return _MyReportCard(report: reports[reportIndex]);
@@ -118,6 +126,7 @@ class _MyReportCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     final outcome = report.resolutionOutcome;
     return Material(
       color: scheme.surfaceContainerLow,
@@ -137,13 +146,13 @@ class _MyReportCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        report.reason,
+                        reportReasonLabel(l10n, report.reason),
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        '${reportTargetLabel(report.targetType)} | ${reportDateTime(context, report.createdAt)}',
+                        '${reportTargetLabel(l10n, report.targetType)} · ${reportDateTime(context, report.createdAt)}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -167,22 +176,22 @@ class _MyReportCard extends StatelessWidget {
             const SizedBox(height: 14),
             if (outcome == null)
               Text(
-                ReportStrings.awaitingOutcome,
+                l10n.reportAwaitingOutcome,
                 style: TextStyle(color: scheme.onSurfaceVariant),
               )
             else ...[
               Text(
-                resolutionOutcomeLabel(outcome),
+                resolutionOutcomeLabel(l10n, outcome),
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               if (report.resolutionNote case final note?) ...[
                 const SizedBox(height: 5),
-                Text('${ReportStrings.moderatorNote}: $note'),
+                Text('${l10n.reportModeratorNote}: $note'),
               ],
               if (report.resolvedAt case final resolvedAt?) ...[
                 const SizedBox(height: 5),
                 Text(
-                  '${ReportStrings.resolvedOn}: ${reportDateTime(context, resolvedAt)}',
+                  '${l10n.reportStatusResolved}: ${reportDateTime(context, resolvedAt)}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -221,7 +230,7 @@ class _StatusChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        reportStatusLabel(status),
+        reportStatusLabel(context.l10n, status),
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
           color: active ? scheme.onSecondaryContainer : scheme.onSurfaceVariant,
           fontWeight: FontWeight.w700,

@@ -96,22 +96,7 @@ class ApiClient {
     try {
       return await request();
     } on DioException catch (error) {
-      final body = error.response?.data;
-      if (body is Map) {
-        final errorBody = body['error'];
-        if (errorBody is Map) {
-          throw ApiException(
-            errorBody['code']?.toString() ?? 'request_failed',
-            errorBody['detail']?.toString() ?? 'Request failed',
-            statusCode: error.response?.statusCode,
-          );
-        }
-      }
-      throw ApiException(
-        'network_error',
-        error.message ?? 'Network request failed',
-        statusCode: error.response?.statusCode,
-      );
+      throw ApiException.fromDio(error);
     }
   }
 

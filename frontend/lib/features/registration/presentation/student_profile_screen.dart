@@ -63,7 +63,7 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
           StudentProfileDraft(
             firstName: _firstName.text.trim(),
             lastName: _lastName.text.trim(),
-            nationalId: _nationalId.text,
+            nationalId: asciiDigits(_nationalId.text),
             degree: _degree,
             department: _department.text.trim(),
             universityId: _universityId.text.trim(),
@@ -133,7 +133,7 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.next,
                 inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9۰-۹٠-٩]')),
                   LengthLimitingTextInputFormatter(10),
                 ],
                 decoration: InputDecoration(
@@ -155,8 +155,10 @@ class _StudentProfileScreenState extends ConsumerState<StudentProfileScreen> {
               ),
               items: const ['BSc', 'MSc', 'PhD', 'other']
                   .map(
-                    (degree) =>
-                        DropdownMenuItem(value: degree, child: Text(degree)),
+                    (degree) => DropdownMenuItem(
+                      value: degree,
+                      child: Text(localizedDegree(l10n, degree)),
+                    ),
                   )
                   .toList(),
               onChanged: (value) => setState(() => _degree = value ?? _degree),

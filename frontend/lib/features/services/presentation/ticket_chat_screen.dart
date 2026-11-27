@@ -6,9 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/core/media/authenticated_media.dart';
 import 'package:university_messenger/features/services/domain/service_models.dart';
-import 'package:university_messenger/features/services/presentation/service_strings.dart';
 import 'package:university_messenger/features/services/presentation/service_widgets.dart';
 import 'package:university_messenger/features/services/services_providers.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class TicketChatScreen extends ConsumerStatefulWidget {
   const TicketChatScreen({required this.requestId, super.key});
@@ -65,9 +65,9 @@ class _TicketChatScreenState extends ConsumerState<TicketChatScreen> {
       _scrollToBottom();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(serviceErrorMessage(error))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(serviceErrorMessage(context.l10n, error))),
+      );
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -82,9 +82,9 @@ class _TicketChatScreenState extends ConsumerState<TicketChatScreen> {
       if (mounted) setState(() => _attachmentId = media.id);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(serviceErrorMessage(error))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(serviceErrorMessage(context.l10n, error))),
+        );
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -93,17 +93,18 @@ class _TicketChatScreenState extends ConsumerState<TicketChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     ref.watch(serviceRealtimeSyncProvider);
     final messages = ref.watch(ticketMessagesProvider(widget.requestId));
     final accountId = ref.watch(authControllerProvider).state.account?.id;
     return Scaffold(
       appBar: AppBar(
-        title: const Text(ServiceStrings.ticketChat),
+        title: Text(l10n.serviceTicketChat),
         actions: [
           IconButton(
             onPressed: () =>
                 ref.invalidate(ticketMessagesProvider(widget.requestId)),
-            tooltip: ServiceStrings.refresh,
+            tooltip: l10n.refresh,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -119,7 +120,7 @@ class _TicketChatScreenState extends ConsumerState<TicketChatScreen> {
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
                   error: (error, _) => ServiceErrorState(
-                    title: ServiceStrings.loadMessagesError,
+                    title: l10n.serviceLoadMessagesError,
                     error: error,
                     onRetry: () => ref.invalidate(
                       ticketMessagesProvider(widget.requestId),
@@ -127,10 +128,10 @@ class _TicketChatScreenState extends ConsumerState<TicketChatScreen> {
                   ),
                   data: (items) {
                     if (items.isEmpty) {
-                      return const ServiceEmptyState(
+                      return ServiceEmptyState(
                         icon: Icons.forum_outlined,
-                        title: ServiceStrings.noMessages,
-                        body: ServiceStrings.noMessagesBody,
+                        title: l10n.serviceNoMessages,
+                        body: l10n.serviceNoMessagesBody,
                       );
                     }
                     if (_lastMessageCount != items.length) {
@@ -183,14 +184,14 @@ class _TicketChatScreenState extends ConsumerState<TicketChatScreen> {
                 child: ListTile(
                   dense: true,
                   leading: const Icon(Icons.attach_file_rounded),
-                  title: const Text(ServiceStrings.attachedMedia),
+                  title: Text(l10n.attachment),
                   subtitle: Directionality(
                     textDirection: TextDirection.ltr,
                     child: Text(_attachmentId!),
                   ),
                   trailing: IconButton(
                     onPressed: () => setState(() => _attachmentId = null),
-                    tooltip: ServiceStrings.removeAttachment,
+                    tooltip: l10n.serviceRemoveAttachment,
                     icon: const Icon(Icons.close_rounded),
                   ),
                 ),
@@ -313,7 +314,7 @@ class _TicketComposer extends StatelessWidget {
           children: [
             IconButton(
               onPressed: sending ? null : onAttach,
-              tooltip: ServiceStrings.addAttachment,
+              tooltip: context.l10n.serviceAddAttachment,
               icon: const Icon(Icons.attach_file_rounded),
             ),
             Expanded(
@@ -325,8 +326,8 @@ class _TicketComposer extends StatelessWidget {
                 maxLength: 10000,
                 textCapitalization: TextCapitalization.sentences,
                 keyboardType: TextInputType.multiline,
-                decoration: const InputDecoration(
-                  hintText: ServiceStrings.messageHint,
+                decoration: InputDecoration(
+                  hintText: context.l10n.messageHint,
                   counterText: '',
                 ),
                 onSubmitted: (_) => onSend(),
@@ -335,7 +336,7 @@ class _TicketComposer extends StatelessWidget {
             const SizedBox(width: 6),
             IconButton.filled(
               onPressed: sending ? null : onSend,
-              tooltip: ServiceStrings.send,
+              tooltip: context.l10n.send,
               icon: sending
                   ? const SizedBox.square(
                       dimension: 20,
@@ -347,70 +348,6 @@ class _TicketComposer extends StatelessWidget {
         ),
       ),
     ),
-  );
-}
-
-class _AttachmentDialog extends StatefulWidget {
-  const _AttachmentDialog();
-
-  @override
-  State<_AttachmentDialog> createState() => _AttachmentDialogState();
-}
-
-class _AttachmentDialogState extends State<_AttachmentDialog> {
-  final _key = GlobalKey<FormState>();
-  final _mediaId = TextEditingController();
-
-  @override
-  void dispose() {
-    _mediaId.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text(ServiceStrings.addAttachment),
-    content: SizedBox(
-      width: 420,
-      child: Form(
-        key: _key,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(ServiceStrings.attachmentHelp),
-            const SizedBox(height: 14),
-            Directionality(
-              textDirection: TextDirection.ltr,
-              child: TextFormField(
-                controller: _mediaId,
-                autofocus: true,
-                autocorrect: false,
-                enableSuggestions: false,
-                decoration: const InputDecoration(
-                  labelText: ServiceStrings.attachmentMediaId,
-                ),
-                validator: (value) =>
-                    isUuid(value ?? '') ? null : ServiceStrings.invalidMediaId,
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text(ServiceStrings.cancel),
-      ),
-      FilledButton(
-        onPressed: () {
-          if (_key.currentState?.validate() != true) return;
-          Navigator.pop(context, _mediaId.text.trim());
-        },
-        child: const Text(ServiceStrings.addAttachment),
-      ),
-    ],
   );
 }
 

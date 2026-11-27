@@ -28,10 +28,16 @@ async def pack_out(db, pack: StickerPack) -> StickerPackOut:
             select(Sticker).where(Sticker.pack_id == pack.id).order_by(Sticker.position)
         )
     )
+    title_key = None
+    if pack.id == PACK_ID:
+        title_key = "campus_notes"
+    elif pack.owner_id and pack.id == uuid5(pack.owner_id, "personal-stickers"):
+        title_key = "my_stickers"
     return StickerPackOut(
         id=pack.id,
         handle=pack.handle,
         title=pack.title,
+        title_key=title_key,
         kind=pack.kind,
         is_official=pack.is_official,
         stickers=[StickerOut.model_validate(item) for item in stickers],

@@ -7,6 +7,7 @@ import 'package:university_messenger/features/reports/domain/report_models.dart'
 import 'package:university_messenger/features/reports/presentation/moderator_report_screen.dart';
 import 'package:university_messenger/features/reports/presentation/report_ui.dart';
 import 'package:university_messenger/features/reports/report_strings.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 typedef OpenModeratorReport = Future<void> Function(ReportRecord report);
 
@@ -22,7 +23,7 @@ class ModeratorQueueScreen extends ConsumerStatefulWidget {
 
 class _ModeratorQueueScreenState extends ConsumerState<ModeratorQueueScreen> {
   List<ReportRecord>? _reports;
-  String? _error;
+  Object? _error;
   bool _loading = false;
   bool _requested = false;
 
@@ -45,7 +46,7 @@ class _ModeratorQueueScreenState extends ConsumerState<ModeratorQueueScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = reportErrorText(error);
+        _error = error;
         _loading = false;
       });
     }
@@ -66,6 +67,7 @@ class _ModeratorQueueScreenState extends ConsumerState<ModeratorQueueScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final account = ref.watch(authControllerProvider).state.account;
     final isModerator = account?.role == UserRole.moderator;
     if (isModerator && !_requested) {
@@ -74,33 +76,34 @@ class _ModeratorQueueScreenState extends ConsumerState<ModeratorQueueScreen> {
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text(ReportStrings.moderationTitle),
+        title: Text(l10n.reportModerationTitle),
         actions: [
           if (isModerator)
             IconButton(
               onPressed: _loading ? null : _load,
-              tooltip: ReportStrings.refresh,
+              tooltip: l10n.refresh,
               icon: const Icon(Icons.refresh_rounded),
             ),
         ],
       ),
       body: SafeArea(
         child: isModerator
-            ? _buildQueue()
-            : const ReportEmptyState(
+            ? _buildQueue(context)
+            : ReportEmptyState(
                 icon: Icons.lock_outline_rounded,
-                title: ReportStrings.moderationAccessTitle,
-                body: ReportStrings.moderationAccessBody,
+                title: l10n.reportModerationAccessTitle,
+                body: l10n.reportModerationAccessBody,
               ),
       ),
     );
   }
 
-  Widget _buildQueue() {
+  Widget _buildQueue(BuildContext context) {
+    final l10n = context.l10n;
     if ((_loading || !_requested) && _reports == null) {
       return Center(
         child: Semantics(
-          label: ReportStrings.loadingQueue,
+          label: l10n.reportLoadingQueue,
           child: const CircularProgressIndicator(),
         ),
       );
@@ -111,17 +114,20 @@ class _ModeratorQueueScreenState extends ConsumerState<ModeratorQueueScreen> {
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
-            child: ReportErrorPanel(message: _error!, onRetry: _load),
+            child: ReportErrorPanel(
+              message: reportErrorText(l10n, _error!),
+              onRetry: _load,
+            ),
           ),
         ),
       );
     }
     final reports = _reports ?? const <ReportRecord>[];
     if (reports.isEmpty) {
-      return const ReportEmptyState(
+      return ReportEmptyState(
         icon: Icons.task_alt_rounded,
-        title: ReportStrings.noQueueTitle,
-        body: ReportStrings.noQueueBody,
+        title: l10n.reportNoQueueTitle,
+        body: l10n.reportNoQueueBody,
       );
     }
     return RefreshIndicator(
@@ -132,7 +138,10 @@ class _ModeratorQueueScreenState extends ConsumerState<ModeratorQueueScreen> {
         separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           if (_error != null && index == 0) {
-            return ReportErrorPanel(message: _error!, onRetry: _load);
+            return ReportErrorPanel(
+              message: reportErrorText(l10n, _error!),
+              onRetry: _load,
+            );
           }
           final reportIndex = index - (_error == null ? 0 : 1);
           final report = reports[reportIndex];
@@ -165,6 +174,7 @@ class _QueueReportTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     final mine = report.assignedTo == currentAccountId;
     return Material(
       color: scheme.surfaceContainerLow,
@@ -188,7 +198,7 @@ class _QueueReportTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      report.reason,
+                      reportReasonLabel(l10n, report.reason),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -197,7 +207,7 @@ class _QueueReportTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${reportTargetLabel(report.targetType)} | ${mine ? ReportStrings.assignedToYou : ReportStrings.unassigned}',
+                      '${reportTargetLabel(l10n, report.targetType)} · ${mine ? l10n.reportAssignedToYou : l10n.unassigned}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -214,12 +224,8 @@ class _QueueReportTile extends StatelessWidget {
               ),
               IconButton(
                 onPressed: onTap,
-                tooltip: ReportStrings.openReport,
-                icon: Icon(
-                  Directionality.of(context) == TextDirection.rtl
-                      ? Icons.chevron_left_rounded
-                      : Icons.chevron_right_rounded,
-                ),
+                tooltip: l10n.reportOpenReport,
+                icon: const Icon(Icons.chevron_right_rounded),
               ),
             ],
           ),

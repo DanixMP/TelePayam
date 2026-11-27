@@ -704,6 +704,21 @@ class $ConversationsTable extends Conversations
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _isSavedMessagesMeta = const VerificationMeta(
+    'isSavedMessages',
+  );
+  @override
+  late final GeneratedColumn<bool> isSavedMessages = GeneratedColumn<bool>(
+    'is_saved_messages',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_saved_messages" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _handleMeta = const VerificationMeta('handle');
   @override
   late final GeneratedColumn<String> handle = GeneratedColumn<String>(
@@ -803,12 +818,33 @@ class $ConversationsTable extends Conversations
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _lastMessageTypeMeta = const VerificationMeta(
+    'lastMessageType',
+  );
+  @override
+  late final GeneratedColumn<String> lastMessageType = GeneratedColumn<String>(
+    'last_message_type',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _lastMessageAtMeta = const VerificationMeta(
     'lastMessageAt',
   );
   @override
   late final GeneratedColumn<int> lastMessageAt = GeneratedColumn<int>(
     'last_message_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastMessageEditedAtMeta =
+      const VerificationMeta('lastMessageEditedAt');
+  @override
+  late final GeneratedColumn<int> lastMessageEditedAt = GeneratedColumn<int>(
+    'last_message_edited_at',
     aliasedName,
     true,
     type: DriftSqlType.int,
@@ -860,6 +896,7 @@ class $ConversationsTable extends Conversations
     avatarId,
     type,
     title,
+    isSavedMessages,
     handle,
     description,
     visibility,
@@ -869,7 +906,9 @@ class $ConversationsTable extends Conversations
     lastSequence,
     lastReadSequence,
     lastMessageBody,
+    lastMessageType,
     lastMessageAt,
+    lastMessageEditedAt,
     isProfessorChannel,
     underReview,
     updatedAt,
@@ -909,6 +948,15 @@ class $ConversationsTable extends Conversations
       context.handle(
         _titleMeta,
         title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    }
+    if (data.containsKey('is_saved_messages')) {
+      context.handle(
+        _isSavedMessagesMeta,
+        isSavedMessages.isAcceptableOrUnknown(
+          data['is_saved_messages']!,
+          _isSavedMessagesMeta,
+        ),
       );
     }
     if (data.containsKey('handle')) {
@@ -982,12 +1030,30 @@ class $ConversationsTable extends Conversations
         ),
       );
     }
+    if (data.containsKey('last_message_type')) {
+      context.handle(
+        _lastMessageTypeMeta,
+        lastMessageType.isAcceptableOrUnknown(
+          data['last_message_type']!,
+          _lastMessageTypeMeta,
+        ),
+      );
+    }
     if (data.containsKey('last_message_at')) {
       context.handle(
         _lastMessageAtMeta,
         lastMessageAt.isAcceptableOrUnknown(
           data['last_message_at']!,
           _lastMessageAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_message_edited_at')) {
+      context.handle(
+        _lastMessageEditedAtMeta,
+        lastMessageEditedAt.isAcceptableOrUnknown(
+          data['last_message_edited_at']!,
+          _lastMessageEditedAtMeta,
         ),
       );
     }
@@ -1042,6 +1108,10 @@ class $ConversationsTable extends Conversations
         DriftSqlType.string,
         data['${effectivePrefix}title'],
       ),
+      isSavedMessages: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_saved_messages'],
+      )!,
       handle: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}handle'],
@@ -1078,9 +1148,17 @@ class $ConversationsTable extends Conversations
         DriftSqlType.string,
         data['${effectivePrefix}last_message_body'],
       ),
+      lastMessageType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_message_type'],
+      ),
       lastMessageAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}last_message_at'],
+      ),
+      lastMessageEditedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_message_edited_at'],
       ),
       isProfessorChannel: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
@@ -1108,6 +1186,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   final String? avatarId;
   final String type;
   final String? title;
+  final bool isSavedMessages;
   final String? handle;
   final String? description;
   final String visibility;
@@ -1117,7 +1196,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   final int lastSequence;
   final int lastReadSequence;
   final String? lastMessageBody;
+  final String? lastMessageType;
   final int? lastMessageAt;
+  final int? lastMessageEditedAt;
   final bool isProfessorChannel;
   final bool underReview;
   final int updatedAt;
@@ -1126,6 +1207,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     this.avatarId,
     required this.type,
     this.title,
+    required this.isSavedMessages,
     this.handle,
     this.description,
     required this.visibility,
@@ -1135,7 +1217,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     required this.lastSequence,
     required this.lastReadSequence,
     this.lastMessageBody,
+    this.lastMessageType,
     this.lastMessageAt,
+    this.lastMessageEditedAt,
     required this.isProfessorChannel,
     required this.underReview,
     required this.updatedAt,
@@ -1151,6 +1235,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     if (!nullToAbsent || title != null) {
       map['title'] = Variable<String>(title);
     }
+    map['is_saved_messages'] = Variable<bool>(isSavedMessages);
     if (!nullToAbsent || handle != null) {
       map['handle'] = Variable<String>(handle);
     }
@@ -1168,8 +1253,14 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     if (!nullToAbsent || lastMessageBody != null) {
       map['last_message_body'] = Variable<String>(lastMessageBody);
     }
+    if (!nullToAbsent || lastMessageType != null) {
+      map['last_message_type'] = Variable<String>(lastMessageType);
+    }
     if (!nullToAbsent || lastMessageAt != null) {
       map['last_message_at'] = Variable<int>(lastMessageAt);
+    }
+    if (!nullToAbsent || lastMessageEditedAt != null) {
+      map['last_message_edited_at'] = Variable<int>(lastMessageEditedAt);
     }
     map['is_professor_channel'] = Variable<bool>(isProfessorChannel);
     map['under_review'] = Variable<bool>(underReview);
@@ -1187,6 +1278,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       title: title == null && nullToAbsent
           ? const Value.absent()
           : Value(title),
+      isSavedMessages: Value(isSavedMessages),
       handle: handle == null && nullToAbsent
           ? const Value.absent()
           : Value(handle),
@@ -1204,9 +1296,15 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       lastMessageBody: lastMessageBody == null && nullToAbsent
           ? const Value.absent()
           : Value(lastMessageBody),
+      lastMessageType: lastMessageType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastMessageType),
       lastMessageAt: lastMessageAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastMessageAt),
+      lastMessageEditedAt: lastMessageEditedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastMessageEditedAt),
       isProfessorChannel: Value(isProfessorChannel),
       underReview: Value(underReview),
       updatedAt: Value(updatedAt),
@@ -1223,6 +1321,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       avatarId: serializer.fromJson<String?>(json['avatarId']),
       type: serializer.fromJson<String>(json['type']),
       title: serializer.fromJson<String?>(json['title']),
+      isSavedMessages: serializer.fromJson<bool>(json['isSavedMessages']),
       handle: serializer.fromJson<String?>(json['handle']),
       description: serializer.fromJson<String?>(json['description']),
       visibility: serializer.fromJson<String>(json['visibility']),
@@ -1232,7 +1331,11 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       lastSequence: serializer.fromJson<int>(json['lastSequence']),
       lastReadSequence: serializer.fromJson<int>(json['lastReadSequence']),
       lastMessageBody: serializer.fromJson<String?>(json['lastMessageBody']),
+      lastMessageType: serializer.fromJson<String?>(json['lastMessageType']),
       lastMessageAt: serializer.fromJson<int?>(json['lastMessageAt']),
+      lastMessageEditedAt: serializer.fromJson<int?>(
+        json['lastMessageEditedAt'],
+      ),
       isProfessorChannel: serializer.fromJson<bool>(json['isProfessorChannel']),
       underReview: serializer.fromJson<bool>(json['underReview']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
@@ -1246,6 +1349,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       'avatarId': serializer.toJson<String?>(avatarId),
       'type': serializer.toJson<String>(type),
       'title': serializer.toJson<String?>(title),
+      'isSavedMessages': serializer.toJson<bool>(isSavedMessages),
       'handle': serializer.toJson<String?>(handle),
       'description': serializer.toJson<String?>(description),
       'visibility': serializer.toJson<String>(visibility),
@@ -1255,7 +1359,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       'lastSequence': serializer.toJson<int>(lastSequence),
       'lastReadSequence': serializer.toJson<int>(lastReadSequence),
       'lastMessageBody': serializer.toJson<String?>(lastMessageBody),
+      'lastMessageType': serializer.toJson<String?>(lastMessageType),
       'lastMessageAt': serializer.toJson<int?>(lastMessageAt),
+      'lastMessageEditedAt': serializer.toJson<int?>(lastMessageEditedAt),
       'isProfessorChannel': serializer.toJson<bool>(isProfessorChannel),
       'underReview': serializer.toJson<bool>(underReview),
       'updatedAt': serializer.toJson<int>(updatedAt),
@@ -1267,6 +1373,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     Value<String?> avatarId = const Value.absent(),
     String? type,
     Value<String?> title = const Value.absent(),
+    bool? isSavedMessages,
     Value<String?> handle = const Value.absent(),
     Value<String?> description = const Value.absent(),
     String? visibility,
@@ -1276,7 +1383,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     int? lastSequence,
     int? lastReadSequence,
     Value<String?> lastMessageBody = const Value.absent(),
+    Value<String?> lastMessageType = const Value.absent(),
     Value<int?> lastMessageAt = const Value.absent(),
+    Value<int?> lastMessageEditedAt = const Value.absent(),
     bool? isProfessorChannel,
     bool? underReview,
     int? updatedAt,
@@ -1285,6 +1394,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     avatarId: avatarId.present ? avatarId.value : this.avatarId,
     type: type ?? this.type,
     title: title.present ? title.value : this.title,
+    isSavedMessages: isSavedMessages ?? this.isSavedMessages,
     handle: handle.present ? handle.value : this.handle,
     description: description.present ? description.value : this.description,
     visibility: visibility ?? this.visibility,
@@ -1296,9 +1406,15 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     lastMessageBody: lastMessageBody.present
         ? lastMessageBody.value
         : this.lastMessageBody,
+    lastMessageType: lastMessageType.present
+        ? lastMessageType.value
+        : this.lastMessageType,
     lastMessageAt: lastMessageAt.present
         ? lastMessageAt.value
         : this.lastMessageAt,
+    lastMessageEditedAt: lastMessageEditedAt.present
+        ? lastMessageEditedAt.value
+        : this.lastMessageEditedAt,
     isProfessorChannel: isProfessorChannel ?? this.isProfessorChannel,
     underReview: underReview ?? this.underReview,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -1309,6 +1425,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       avatarId: data.avatarId.present ? data.avatarId.value : this.avatarId,
       type: data.type.present ? data.type.value : this.type,
       title: data.title.present ? data.title.value : this.title,
+      isSavedMessages: data.isSavedMessages.present
+          ? data.isSavedMessages.value
+          : this.isSavedMessages,
       handle: data.handle.present ? data.handle.value : this.handle,
       description: data.description.present
           ? data.description.value
@@ -1330,9 +1449,15 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       lastMessageBody: data.lastMessageBody.present
           ? data.lastMessageBody.value
           : this.lastMessageBody,
+      lastMessageType: data.lastMessageType.present
+          ? data.lastMessageType.value
+          : this.lastMessageType,
       lastMessageAt: data.lastMessageAt.present
           ? data.lastMessageAt.value
           : this.lastMessageAt,
+      lastMessageEditedAt: data.lastMessageEditedAt.present
+          ? data.lastMessageEditedAt.value
+          : this.lastMessageEditedAt,
       isProfessorChannel: data.isProfessorChannel.present
           ? data.isProfessorChannel.value
           : this.isProfessorChannel,
@@ -1350,6 +1475,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           ..write('avatarId: $avatarId, ')
           ..write('type: $type, ')
           ..write('title: $title, ')
+          ..write('isSavedMessages: $isSavedMessages, ')
           ..write('handle: $handle, ')
           ..write('description: $description, ')
           ..write('visibility: $visibility, ')
@@ -1359,7 +1485,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           ..write('lastSequence: $lastSequence, ')
           ..write('lastReadSequence: $lastReadSequence, ')
           ..write('lastMessageBody: $lastMessageBody, ')
+          ..write('lastMessageType: $lastMessageType, ')
           ..write('lastMessageAt: $lastMessageAt, ')
+          ..write('lastMessageEditedAt: $lastMessageEditedAt, ')
           ..write('isProfessorChannel: $isProfessorChannel, ')
           ..write('underReview: $underReview, ')
           ..write('updatedAt: $updatedAt')
@@ -1373,6 +1501,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     avatarId,
     type,
     title,
+    isSavedMessages,
     handle,
     description,
     visibility,
@@ -1382,7 +1511,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     lastSequence,
     lastReadSequence,
     lastMessageBody,
+    lastMessageType,
     lastMessageAt,
+    lastMessageEditedAt,
     isProfessorChannel,
     underReview,
     updatedAt,
@@ -1395,6 +1526,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           other.avatarId == this.avatarId &&
           other.type == this.type &&
           other.title == this.title &&
+          other.isSavedMessages == this.isSavedMessages &&
           other.handle == this.handle &&
           other.description == this.description &&
           other.visibility == this.visibility &&
@@ -1404,7 +1536,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           other.lastSequence == this.lastSequence &&
           other.lastReadSequence == this.lastReadSequence &&
           other.lastMessageBody == this.lastMessageBody &&
+          other.lastMessageType == this.lastMessageType &&
           other.lastMessageAt == this.lastMessageAt &&
+          other.lastMessageEditedAt == this.lastMessageEditedAt &&
           other.isProfessorChannel == this.isProfessorChannel &&
           other.underReview == this.underReview &&
           other.updatedAt == this.updatedAt);
@@ -1415,6 +1549,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
   final Value<String?> avatarId;
   final Value<String> type;
   final Value<String?> title;
+  final Value<bool> isSavedMessages;
   final Value<String?> handle;
   final Value<String?> description;
   final Value<String> visibility;
@@ -1424,7 +1559,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
   final Value<int> lastSequence;
   final Value<int> lastReadSequence;
   final Value<String?> lastMessageBody;
+  final Value<String?> lastMessageType;
   final Value<int?> lastMessageAt;
+  final Value<int?> lastMessageEditedAt;
   final Value<bool> isProfessorChannel;
   final Value<bool> underReview;
   final Value<int> updatedAt;
@@ -1434,6 +1571,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.avatarId = const Value.absent(),
     this.type = const Value.absent(),
     this.title = const Value.absent(),
+    this.isSavedMessages = const Value.absent(),
     this.handle = const Value.absent(),
     this.description = const Value.absent(),
     this.visibility = const Value.absent(),
@@ -1443,7 +1581,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.lastSequence = const Value.absent(),
     this.lastReadSequence = const Value.absent(),
     this.lastMessageBody = const Value.absent(),
+    this.lastMessageType = const Value.absent(),
     this.lastMessageAt = const Value.absent(),
+    this.lastMessageEditedAt = const Value.absent(),
     this.isProfessorChannel = const Value.absent(),
     this.underReview = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1454,6 +1594,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.avatarId = const Value.absent(),
     required String type,
     this.title = const Value.absent(),
+    this.isSavedMessages = const Value.absent(),
     this.handle = const Value.absent(),
     this.description = const Value.absent(),
     this.visibility = const Value.absent(),
@@ -1463,7 +1604,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.lastSequence = const Value.absent(),
     this.lastReadSequence = const Value.absent(),
     this.lastMessageBody = const Value.absent(),
+    this.lastMessageType = const Value.absent(),
     this.lastMessageAt = const Value.absent(),
+    this.lastMessageEditedAt = const Value.absent(),
     this.isProfessorChannel = const Value.absent(),
     this.underReview = const Value.absent(),
     required int updatedAt,
@@ -1477,6 +1620,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Expression<String>? avatarId,
     Expression<String>? type,
     Expression<String>? title,
+    Expression<bool>? isSavedMessages,
     Expression<String>? handle,
     Expression<String>? description,
     Expression<String>? visibility,
@@ -1486,7 +1630,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Expression<int>? lastSequence,
     Expression<int>? lastReadSequence,
     Expression<String>? lastMessageBody,
+    Expression<String>? lastMessageType,
     Expression<int>? lastMessageAt,
+    Expression<int>? lastMessageEditedAt,
     Expression<bool>? isProfessorChannel,
     Expression<bool>? underReview,
     Expression<int>? updatedAt,
@@ -1497,6 +1643,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       if (avatarId != null) 'avatar_id': avatarId,
       if (type != null) 'type': type,
       if (title != null) 'title': title,
+      if (isSavedMessages != null) 'is_saved_messages': isSavedMessages,
       if (handle != null) 'handle': handle,
       if (description != null) 'description': description,
       if (visibility != null) 'visibility': visibility,
@@ -1506,7 +1653,10 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       if (lastSequence != null) 'last_sequence': lastSequence,
       if (lastReadSequence != null) 'last_read_sequence': lastReadSequence,
       if (lastMessageBody != null) 'last_message_body': lastMessageBody,
+      if (lastMessageType != null) 'last_message_type': lastMessageType,
       if (lastMessageAt != null) 'last_message_at': lastMessageAt,
+      if (lastMessageEditedAt != null)
+        'last_message_edited_at': lastMessageEditedAt,
       if (isProfessorChannel != null)
         'is_professor_channel': isProfessorChannel,
       if (underReview != null) 'under_review': underReview,
@@ -1520,6 +1670,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Value<String?>? avatarId,
     Value<String>? type,
     Value<String?>? title,
+    Value<bool>? isSavedMessages,
     Value<String?>? handle,
     Value<String?>? description,
     Value<String>? visibility,
@@ -1529,7 +1680,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Value<int>? lastSequence,
     Value<int>? lastReadSequence,
     Value<String?>? lastMessageBody,
+    Value<String?>? lastMessageType,
     Value<int?>? lastMessageAt,
+    Value<int?>? lastMessageEditedAt,
     Value<bool>? isProfessorChannel,
     Value<bool>? underReview,
     Value<int>? updatedAt,
@@ -1540,6 +1693,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       avatarId: avatarId ?? this.avatarId,
       type: type ?? this.type,
       title: title ?? this.title,
+      isSavedMessages: isSavedMessages ?? this.isSavedMessages,
       handle: handle ?? this.handle,
       description: description ?? this.description,
       visibility: visibility ?? this.visibility,
@@ -1549,7 +1703,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       lastSequence: lastSequence ?? this.lastSequence,
       lastReadSequence: lastReadSequence ?? this.lastReadSequence,
       lastMessageBody: lastMessageBody ?? this.lastMessageBody,
+      lastMessageType: lastMessageType ?? this.lastMessageType,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      lastMessageEditedAt: lastMessageEditedAt ?? this.lastMessageEditedAt,
       isProfessorChannel: isProfessorChannel ?? this.isProfessorChannel,
       underReview: underReview ?? this.underReview,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1571,6 +1727,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     }
     if (title.present) {
       map['title'] = Variable<String>(title.value);
+    }
+    if (isSavedMessages.present) {
+      map['is_saved_messages'] = Variable<bool>(isSavedMessages.value);
     }
     if (handle.present) {
       map['handle'] = Variable<String>(handle.value);
@@ -1599,8 +1758,14 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     if (lastMessageBody.present) {
       map['last_message_body'] = Variable<String>(lastMessageBody.value);
     }
+    if (lastMessageType.present) {
+      map['last_message_type'] = Variable<String>(lastMessageType.value);
+    }
     if (lastMessageAt.present) {
       map['last_message_at'] = Variable<int>(lastMessageAt.value);
+    }
+    if (lastMessageEditedAt.present) {
+      map['last_message_edited_at'] = Variable<int>(lastMessageEditedAt.value);
     }
     if (isProfessorChannel.present) {
       map['is_professor_channel'] = Variable<bool>(isProfessorChannel.value);
@@ -1624,6 +1789,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           ..write('avatarId: $avatarId, ')
           ..write('type: $type, ')
           ..write('title: $title, ')
+          ..write('isSavedMessages: $isSavedMessages, ')
           ..write('handle: $handle, ')
           ..write('description: $description, ')
           ..write('visibility: $visibility, ')
@@ -1633,7 +1799,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           ..write('lastSequence: $lastSequence, ')
           ..write('lastReadSequence: $lastReadSequence, ')
           ..write('lastMessageBody: $lastMessageBody, ')
+          ..write('lastMessageType: $lastMessageType, ')
           ..write('lastMessageAt: $lastMessageAt, ')
+          ..write('lastMessageEditedAt: $lastMessageEditedAt, ')
           ..write('isProfessorChannel: $isProfessorChannel, ')
           ..write('underReview: $underReview, ')
           ..write('updatedAt: $updatedAt, ')
@@ -6216,6 +6384,7 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       Value<String?> avatarId,
       required String type,
       Value<String?> title,
+      Value<bool> isSavedMessages,
       Value<String?> handle,
       Value<String?> description,
       Value<String> visibility,
@@ -6225,7 +6394,9 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       Value<int> lastSequence,
       Value<int> lastReadSequence,
       Value<String?> lastMessageBody,
+      Value<String?> lastMessageType,
       Value<int?> lastMessageAt,
+      Value<int?> lastMessageEditedAt,
       Value<bool> isProfessorChannel,
       Value<bool> underReview,
       required int updatedAt,
@@ -6237,6 +6408,7 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<String?> avatarId,
       Value<String> type,
       Value<String?> title,
+      Value<bool> isSavedMessages,
       Value<String?> handle,
       Value<String?> description,
       Value<String> visibility,
@@ -6246,7 +6418,9 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<int> lastSequence,
       Value<int> lastReadSequence,
       Value<String?> lastMessageBody,
+      Value<String?> lastMessageType,
       Value<int?> lastMessageAt,
+      Value<int?> lastMessageEditedAt,
       Value<bool> isProfessorChannel,
       Value<bool> underReview,
       Value<int> updatedAt,
@@ -6279,6 +6453,11 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<String> get title => $composableBuilder(
     column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isSavedMessages => $composableBuilder(
+    column: $table.isSavedMessages,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6327,8 +6506,18 @@ class $$ConversationsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get lastMessageType => $composableBuilder(
+    column: $table.lastMessageType,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get lastMessageAt => $composableBuilder(
     column: $table.lastMessageAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastMessageEditedAt => $composableBuilder(
+    column: $table.lastMessageEditedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6377,6 +6566,11 @@ class $$ConversationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isSavedMessages => $composableBuilder(
+    column: $table.isSavedMessages,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get handle => $composableBuilder(
     column: $table.handle,
     builder: (column) => ColumnOrderings(column),
@@ -6422,8 +6616,18 @@ class $$ConversationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get lastMessageType => $composableBuilder(
+    column: $table.lastMessageType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get lastMessageAt => $composableBuilder(
     column: $table.lastMessageAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastMessageEditedAt => $composableBuilder(
+    column: $table.lastMessageEditedAt,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -6464,6 +6668,11 @@ class $$ConversationsTableAnnotationComposer
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
 
+  GeneratedColumn<bool> get isSavedMessages => $composableBuilder(
+    column: $table.isSavedMessages,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get handle =>
       $composableBuilder(column: $table.handle, builder: (column) => column);
 
@@ -6503,8 +6712,18 @@ class $$ConversationsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get lastMessageType => $composableBuilder(
+    column: $table.lastMessageType,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get lastMessageAt => $composableBuilder(
     column: $table.lastMessageAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lastMessageEditedAt => $composableBuilder(
+    column: $table.lastMessageEditedAt,
     builder: (column) => column,
   );
 
@@ -6557,6 +6776,7 @@ class $$ConversationsTableTableManager
                 Value<String?> avatarId = const Value.absent(),
                 Value<String> type = const Value.absent(),
                 Value<String?> title = const Value.absent(),
+                Value<bool> isSavedMessages = const Value.absent(),
                 Value<String?> handle = const Value.absent(),
                 Value<String?> description = const Value.absent(),
                 Value<String> visibility = const Value.absent(),
@@ -6566,7 +6786,9 @@ class $$ConversationsTableTableManager
                 Value<int> lastSequence = const Value.absent(),
                 Value<int> lastReadSequence = const Value.absent(),
                 Value<String?> lastMessageBody = const Value.absent(),
+                Value<String?> lastMessageType = const Value.absent(),
                 Value<int?> lastMessageAt = const Value.absent(),
+                Value<int?> lastMessageEditedAt = const Value.absent(),
                 Value<bool> isProfessorChannel = const Value.absent(),
                 Value<bool> underReview = const Value.absent(),
                 Value<int> updatedAt = const Value.absent(),
@@ -6576,6 +6798,7 @@ class $$ConversationsTableTableManager
                 avatarId: avatarId,
                 type: type,
                 title: title,
+                isSavedMessages: isSavedMessages,
                 handle: handle,
                 description: description,
                 visibility: visibility,
@@ -6585,7 +6808,9 @@ class $$ConversationsTableTableManager
                 lastSequence: lastSequence,
                 lastReadSequence: lastReadSequence,
                 lastMessageBody: lastMessageBody,
+                lastMessageType: lastMessageType,
                 lastMessageAt: lastMessageAt,
+                lastMessageEditedAt: lastMessageEditedAt,
                 isProfessorChannel: isProfessorChannel,
                 underReview: underReview,
                 updatedAt: updatedAt,
@@ -6597,6 +6822,7 @@ class $$ConversationsTableTableManager
                 Value<String?> avatarId = const Value.absent(),
                 required String type,
                 Value<String?> title = const Value.absent(),
+                Value<bool> isSavedMessages = const Value.absent(),
                 Value<String?> handle = const Value.absent(),
                 Value<String?> description = const Value.absent(),
                 Value<String> visibility = const Value.absent(),
@@ -6606,7 +6832,9 @@ class $$ConversationsTableTableManager
                 Value<int> lastSequence = const Value.absent(),
                 Value<int> lastReadSequence = const Value.absent(),
                 Value<String?> lastMessageBody = const Value.absent(),
+                Value<String?> lastMessageType = const Value.absent(),
                 Value<int?> lastMessageAt = const Value.absent(),
+                Value<int?> lastMessageEditedAt = const Value.absent(),
                 Value<bool> isProfessorChannel = const Value.absent(),
                 Value<bool> underReview = const Value.absent(),
                 required int updatedAt,
@@ -6616,6 +6844,7 @@ class $$ConversationsTableTableManager
                 avatarId: avatarId,
                 type: type,
                 title: title,
+                isSavedMessages: isSavedMessages,
                 handle: handle,
                 description: description,
                 visibility: visibility,
@@ -6625,7 +6854,9 @@ class $$ConversationsTableTableManager
                 lastSequence: lastSequence,
                 lastReadSequence: lastReadSequence,
                 lastMessageBody: lastMessageBody,
+                lastMessageType: lastMessageType,
                 lastMessageAt: lastMessageAt,
+                lastMessageEditedAt: lastMessageEditedAt,
                 isProfessorChannel: isProfessorChannel,
                 underReview: underReview,
                 updatedAt: updatedAt,

@@ -11,6 +11,7 @@ import 'package:university_messenger/features/communities/presentation/community
 import 'package:university_messenger/features/communities/presentation/community_members_screen.dart';
 import 'package:university_messenger/features/communities/presentation/community_widgets.dart';
 import 'package:university_messenger/features/reports/reports.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class CommunityInfoScreen extends ConsumerStatefulWidget {
   const CommunityInfoScreen({
@@ -68,9 +69,14 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
       await ref.read(chatRepositoryProvider).refreshConversations();
       if (!mounted) return;
       setState(() => _conversation = conversation);
-      showCommunityMessage(context, 'Joined ${conversation.title}.');
+      showCommunityMessage(
+        context,
+        context.l10n.communityJoined(communityTitle(context, conversation)),
+      );
     } catch (error) {
-      if (mounted) showCommunityMessage(context, communityErrorText(error));
+      if (mounted) {
+        showCommunityMessage(context, communityErrorText(context, error));
+      }
     } finally {
       if (mounted) setState(() => _mutating = false);
     }
@@ -80,9 +86,11 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
     final conversation = _conversation!;
     final confirmed = await confirmCommunityAction(
       context,
-      title: 'Leave ${conversation.title}?',
-      body: 'You will need to join again to see new messages.',
-      confirmLabel: 'Leave',
+      title: context.l10n.communityLeaveTitle(
+        communityTitle(context, conversation),
+      ),
+      body: context.l10n.communityLeaveBody,
+      confirmLabel: context.l10n.leave,
       destructive: true,
     );
     if (!confirmed || !mounted) return;
@@ -92,7 +100,9 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
       await ref.read(chatRepositoryProvider).refreshConversations();
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
-      if (mounted) showCommunityMessage(context, communityErrorText(error));
+      if (mounted) {
+        showCommunityMessage(context, communityErrorText(context, error));
+      }
     } finally {
       if (mounted) setState(() => _mutating = false);
     }
@@ -102,9 +112,11 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
     final conversation = _conversation!;
     final confirmed = await confirmCommunityAction(
       context,
-      title: 'Delete ${conversation.title}?',
-      body: 'This permanently deletes the community and its conversation.',
-      confirmLabel: 'Delete',
+      title: context.l10n.communityDeleteTitle(
+        communityTitle(context, conversation),
+      ),
+      body: context.l10n.communityDeleteBody,
+      confirmLabel: context.l10n.delete,
       destructive: true,
     );
     if (!confirmed || !mounted) return;
@@ -114,7 +126,9 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
       await ref.read(chatRepositoryProvider).refreshConversations();
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
-      if (mounted) showCommunityMessage(context, communityErrorText(error));
+      if (mounted) {
+        showCommunityMessage(context, communityErrorText(context, error));
+      }
     } finally {
       if (mounted) setState(() => _mutating = false);
     }
@@ -131,13 +145,14 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final conversation = _conversation;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Community info'),
+        title: Text(l10n.communityInfo),
         actions: [
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: l10n.refresh,
             onPressed: _loading ? null : _load,
             icon: const Icon(Icons.refresh_rounded),
           ),
@@ -165,12 +180,10 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
                           Card(
                             elevation: 0,
                             color: Theme.of(context).colorScheme.errorContainer,
-                            child: const ListTile(
-                              leading: Icon(Icons.policy_rounded),
-                              title: Text('Conversation under review'),
-                              subtitle: Text(
-                                'Some actions may be limited while a report is reviewed.',
-                              ),
+                            child: ListTile(
+                              leading: const Icon(Icons.policy_rounded),
+                              title: Text(l10n.communityUnderReview),
+                              subtitle: Text(l10n.communityUnderReviewBody),
                             ),
                           ),
                         ],
@@ -178,7 +191,7 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
                         _primaryAction(conversation),
                         const SizedBox(height: 24),
                         Text(
-                          'About',
+                          l10n.about,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 8),
@@ -193,8 +206,12 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
                                 leading: const Icon(
                                   Icons.people_outline_rounded,
                                 ),
-                                title: const Text('Members'),
-                                trailing: Text('${conversation.memberCount}'),
+                                title: Text(l10n.members),
+                                trailing: Text(
+                                  MaterialLocalizations.of(
+                                    context,
+                                  ).formatDecimal(conversation.memberCount),
+                                ),
                                 onTap: conversation.isMember
                                     ? () => Navigator.of(context).push(
                                         MaterialPageRoute<void>(
@@ -214,12 +231,12 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
                                       ? Icons.public_rounded
                                       : Icons.lock_outline_rounded,
                                 ),
-                                title: const Text('Visibility'),
+                                title: Text(l10n.visibility),
                                 trailing: Text(
                                   conversation.visibility ==
                                           CommunityVisibility.public
-                                      ? 'Public'
-                                      : 'Private',
+                                      ? l10n.publicVisibility
+                                      : l10n.privateVisibility,
                                 ),
                               ),
                               if (conversation.handle != null) ...[
@@ -228,8 +245,11 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
                                   leading: const Icon(
                                     Icons.alternate_email_rounded,
                                   ),
-                                  title: const Text('Handle'),
-                                  trailing: Text('@${conversation.handle}'),
+                                  title: Text(l10n.username),
+                                  trailing: Text(
+                                    '@${conversation.handle}',
+                                    textDirection: TextDirection.ltr,
+                                  ),
                                 ),
                               ],
                               const Divider(height: 1),
@@ -237,7 +257,7 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
                                 leading: const Icon(
                                   Icons.calendar_today_rounded,
                                 ),
-                                title: const Text('Created'),
+                                title: Text(l10n.created),
                                 trailing: Text(
                                   MaterialLocalizations.of(
                                     context,
@@ -252,7 +272,7 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
                         if (conversation.canManage) ...[
                           const SizedBox(height: 24),
                           Text(
-                            'Manage',
+                            l10n.manage,
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                           const SizedBox(height: 8),
@@ -265,18 +285,18 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
                               children: [
                                 ListTile(
                                   leading: const Icon(Icons.edit_outlined),
-                                  title: const Text('Metadata and settings'),
+                                  title: Text(l10n.communityDetailsAndSettings),
                                   trailing: const Icon(
-                                    Icons.chevron_right_rounded,
+                                    Icons.navigate_next_rounded,
                                   ),
                                   onTap: _openEdit,
                                 ),
                                 const Divider(height: 1),
                                 ListTile(
                                   leading: const Icon(Icons.link_rounded),
-                                  title: const Text('Invite links'),
+                                  title: Text(l10n.communityInviteLinks),
                                   trailing: const Icon(
-                                    Icons.chevron_right_rounded,
+                                    Icons.navigate_next_rounded,
                                   ),
                                   onTap: () => Navigator.of(context).push(
                                     MaterialPageRoute<void>(
@@ -295,7 +315,7 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
                           OutlinedButton.icon(
                             onPressed: () => Navigator.of(context).push(
                               MaterialPageRoute<void>(
-                                builder: (_) => SubmitReportScreen(
+                                builder: (context) => SubmitReportScreen(
                                   target: ReportTargetContext(
                                     type:
                                         conversation.type == CommunityType.group
@@ -303,13 +323,16 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
                                         : ReportTargetType.channel,
                                     targetId: conversation.id,
                                     conversationId: conversation.id,
-                                    label: conversation.title,
+                                    label: communityTitle(
+                                      context,
+                                      conversation,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                             icon: const Icon(Icons.flag_outlined),
-                            label: const Text('Report community'),
+                            label: Text(l10n.communityReport),
                           ),
                           const SizedBox(height: 10),
                           if (conversation.isOwner)
@@ -321,7 +344,7 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
                                 ).colorScheme.error,
                               ),
                               icon: const Icon(Icons.delete_outline_rounded),
-                              label: const Text('Delete community'),
+                              label: Text(l10n.communityDelete),
                             )
                           else
                             OutlinedButton.icon(
@@ -332,7 +355,7 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
                                 ).colorScheme.error,
                               ),
                               icon: const Icon(Icons.logout_rounded),
-                              label: const Text('Leave community'),
+                              label: Text(l10n.communityLeave),
                             ),
                         ],
                       ],
@@ -353,14 +376,15 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
     if (_loading) return const Center(child: CircularProgressIndicator());
     return CommunityStateMessage(
       icon: Icons.cloud_off_rounded,
-      title: 'Could not load community',
-      body: communityErrorText(_error ?? Exception()),
-      actionLabel: 'Try again',
+      title: context.l10n.communityLoadOneError,
+      body: communityErrorText(context, _error),
+      actionLabel: context.l10n.tryAgain,
       onAction: _load,
     );
   }
 
   Widget _primaryAction(CommunityConversation conversation) {
+    final l10n = context.l10n;
     if (!conversation.isMember) {
       final accountRole = ref.watch(authControllerProvider).state.account?.role;
       final canJoin =
@@ -369,7 +393,9 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
       return FilledButton.icon(
         onPressed: canJoin && !_mutating ? _join : null,
         icon: const Icon(Icons.login_rounded),
-        label: Text(canJoin ? 'Join community' : 'Unable to join'),
+        label: Text(
+          canJoin ? l10n.communityJoinAction : l10n.communityCannotJoin,
+        ),
       );
     }
     final open = widget.onOpenConversation;
@@ -377,13 +403,13 @@ class _CommunityInfoScreenState extends ConsumerState<CommunityInfoScreen> {
       return FilledButton.tonalIcon(
         onPressed: null,
         icon: const Icon(Icons.forum_outlined),
-        label: const Text('Conversation route not connected'),
+        label: Text(l10n.communityChatUnavailable),
       );
     }
     return FilledButton.icon(
       onPressed: () => open(conversation.id),
       icon: const Icon(Icons.forum_rounded),
-      label: const Text('Open conversation'),
+      label: Text(l10n.communityOpenChat),
     );
   }
 }
@@ -394,69 +420,75 @@ class _CommunityHeader extends StatelessWidget {
   final CommunityConversation conversation;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      CommunityAvatar(conversation: conversation, radius: 42),
-      const SizedBox(height: 14),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Flexible(
-            child: Text(
-              conversation.title,
-              textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+  Widget build(BuildContext context) {
+    final description = communityDescription(context, conversation);
+    return Column(
+      children: [
+        CommunityAvatar(conversation: conversation, radius: 42),
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                communityTitle(context, conversation),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-          ),
-          if (conversation.isProfessorChannel) ...[
-            const SizedBox(width: 6),
-            const Icon(Icons.verified_rounded, size: 22),
+            if (conversation.isProfessorChannel) ...[
+              const SizedBox(width: 6),
+              const Icon(Icons.verified_rounded, size: 22),
+            ],
           ],
-        ],
-      ),
-      if (conversation.handle != null) ...[
-        const SizedBox(height: 4),
-        Text(
-          '@${conversation.handle}',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context).colorScheme.primary,
-          ),
         ),
-      ],
-      if (conversation.description?.isNotEmpty == true) ...[
+        if (conversation.handle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            '@${conversation.handle}',
+            textDirection: TextDirection.ltr,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ],
+        if (description != null && description.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            description,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ],
         const SizedBox(height: 12),
-        Text(
-          conversation.description!,
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyLarge,
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            Chip(
+              avatar: Icon(
+                conversation.type == CommunityType.group
+                    ? Icons.groups_rounded
+                    : Icons.campaign_rounded,
+                size: 18,
+              ),
+              label: Text(
+                conversation.type == CommunityType.group
+                    ? context.l10n.group
+                    : context.l10n.channel,
+              ),
+            ),
+            if (conversation.isProfessorChannel)
+              Chip(
+                avatar: const Icon(Icons.school_rounded, size: 18),
+                label: Text(context.l10n.professor),
+              ),
+          ],
         ),
       ],
-      const SizedBox(height: 12),
-      Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          Chip(
-            avatar: Icon(
-              conversation.type == CommunityType.group
-                  ? Icons.groups_rounded
-                  : Icons.campaign_rounded,
-              size: 18,
-            ),
-            label: Text(
-              conversation.type == CommunityType.group ? 'Group' : 'Channel',
-            ),
-          ),
-          if (conversation.isProfessorChannel)
-            const Chip(
-              avatar: Icon(Icons.school_rounded, size: 18),
-              label: Text('Professor'),
-            ),
-        ],
-      ),
-    ],
-  );
+    );
+  }
 }

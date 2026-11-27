@@ -51,7 +51,10 @@ class RegistrationReviewScreen extends ConsumerWidget {
                 value: maskNationalId(student!.nationalId),
                 forceLtr: true,
               ),
-              _ReviewRow(label: l10n.degree, value: student.degree),
+              _ReviewRow(
+                label: l10n.degree,
+                value: localizedDegree(l10n, student.degree),
+              ),
               _ReviewRow(label: l10n.department, value: student.department),
               _ReviewRow(
                 label: l10n.universityId,

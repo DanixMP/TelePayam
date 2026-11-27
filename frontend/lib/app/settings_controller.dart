@@ -1,7 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:university_messenger/l10n/generated/app_localizations.dart';
 
 abstract interface class AppSettingsStore {
   Future<String?> read(String key);
@@ -37,45 +36,69 @@ class MemoryAppSettingsStore implements AppSettingsStore {
 
 class SettingsController extends ChangeNotifier {
   SettingsController({required AppSettingsStore store}) : _store = store {
-    unawaited(_load());
+    _initialLoad = _load();
   }
 
   static const localeKey = 'settings.locale';
   static const themeKey = 'settings.theme';
 
   final AppSettingsStore _store;
+  late final Future<void> _initialLoad;
+  Future<void> _pendingWrite = Future.value();
   Locale _locale = const Locale('fa');
   ThemeMode _themeMode = ThemeMode.system;
+  bool _disposed = false;
 
   Locale get locale => _locale;
   ThemeMode get themeMode => _themeMode;
 
   Future<void> _load() async {
-    final values = await Future.wait([
-      _store.read(localeKey),
-      _store.read(themeKey),
-    ]);
-    if (values[0] != null) _locale = Locale(values[0]!);
+    final (locale, theme) = await (_read(localeKey), _read(themeKey)).wait;
+    if (_disposed) return;
+    _locale = AppLocalizations.supportedLocales.firstWhere(
+      (supported) => supported.languageCode == locale,
+      orElse: () => _locale,
+    );
     _themeMode = ThemeMode.values.firstWhere(
-      (mode) => mode.name == values[1],
+      (mode) => mode.name == theme,
       orElse: () => ThemeMode.system,
     );
     notifyListeners();
   }
 
-  Future<void> toggleLocale() async {
-    _locale = Locale(_locale.languageCode == 'fa' ? 'en' : 'fa');
-    notifyListeners();
-    await _store.write(localeKey, _locale.languageCode);
+  Future<String?> _read(String key) async {
+    try {
+      return await _store.read(key);
+    } catch (_) {
+      return null;
+    }
   }
 
-  Future<void> cycleTheme() async {
-    _themeMode = switch (_themeMode) {
-      ThemeMode.system => ThemeMode.light,
-      ThemeMode.light => ThemeMode.dark,
-      ThemeMode.dark => ThemeMode.system,
-    };
-    notifyListeners();
-    await _store.write(themeKey, _themeMode.name);
+  Future<void> setLocale(Locale locale) async {
+    if (!AppLocalizations.supportedLocales.contains(locale)) {
+      throw ArgumentError.value(locale, 'locale', 'Unsupported locale');
+    }
+    await _save(localeKey, locale.languageCode, () => _locale = locale);
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) =>
+      _save(themeKey, mode.name, () => _themeMode = mode);
+
+  Future<void> _save(String key, String value, VoidCallback update) {
+    final write = _pendingWrite.then((_) async {
+      await _initialLoad;
+      await _store.write(key, value);
+      if (_disposed) return;
+      update();
+      notifyListeners();
+    });
+    _pendingWrite = write.catchError((Object _) {});
+    return write;
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }

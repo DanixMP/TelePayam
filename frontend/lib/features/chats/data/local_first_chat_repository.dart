@@ -3,11 +3,14 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:drift/drift.dart';
+import 'package:university_messenger/core/network/api_exception.dart';
 import 'package:university_messenger/core/network/realtime_client.dart';
 import 'package:university_messenger/core/storage/app_database.dart';
 import 'package:university_messenger/features/chats/data/chat_api.dart';
 import 'package:university_messenger/features/chats/domain/chat_models.dart';
 import 'package:university_messenger/features/chats/domain/chat_repository.dart';
+
+const _searchLetterVariants = {'ي': 'ی', 'ك': 'ک'};
 
 class LocalFirstChatRepository implements ChatRepository {
   LocalFirstChatRepository({
@@ -57,30 +60,102 @@ class LocalFirstChatRepository implements ChatRepository {
   }
 
   @override
-  Stream<List<ChatConversation>> watchConversations({String query = ''}) {
-    final normalized = query.trim().toLowerCase();
-    return (_database.select(
-      _database.conversations,
-    )..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])).watch().asyncMap((
-      rows,
-    ) async {
-      if (normalized.isEmpty) return rows.map(_conversationFromRow).toList();
-      final matchingMessages = await (_database.select(
-        _database.messages,
-      )..where((row) => row.body.lower().like('%$normalized%'))).get();
-      final matchingIds = matchingMessages
-          .map((message) => message.conversationId)
-          .toSet();
-      return rows
-          .where(
-            (row) =>
-                (row.title ?? '').toLowerCase().contains(normalized) ||
-                (row.handle ?? '').toLowerCase().contains(normalized) ||
-                matchingIds.contains(row.id),
-          )
-          .map(_conversationFromRow)
-          .toList();
+  Stream<List<ChatConversation>> watchConversations({
+    String query = '',
+    Iterable<String?> Function(ChatConversation)? conversationSearchText,
+    String? Function(ChatMessage)? messageSearchText,
+  }) {
+    String normalize(String text) {
+      var result = text.toLowerCase();
+      for (final variant in _searchLetterVariants.entries) {
+        result = result.replaceAll(variant.key, variant.value);
+      }
+      return result;
+    }
+
+    final normalized = normalize(query.trim());
+    final stream = _watchConversationPreviews();
+    if (normalized.isEmpty) return stream;
+
+    final escaped = normalized
+        .replaceAll(r'\', r'\\')
+        .replaceAll('%', r'\%')
+        .replaceAll('_', r'\_');
+    return stream.asyncMap((conversations) async {
+      final matchingMessages =
+          await (_database.select(_database.messages)..where((row) {
+                Expression<String> body = row.body.lower();
+                for (final variant in _searchLetterVariants.entries) {
+                  body = FunctionCallExpression('replace', [
+                    body,
+                    Constant(variant.key),
+                    Constant(variant.value),
+                  ]);
+                }
+                final matches = body.like('%$escaped%', escapeChar: r'\');
+                final isDemo =
+                    row.id.isIn(demoMessageIds) & row.editedAt.isNull();
+                return row.deletedAt.isNull() &
+                    (messageSearchText == null ? matches : matches | isDemo);
+              }))
+              .get();
+      bool matches(String? text) =>
+          text != null && normalize(text).contains(normalized);
+      final matchingIds = {
+        for (final row in matchingMessages)
+          if (messageSearchText == null ||
+              !demoMessageIds.contains(row.id) ||
+              row.editedAt != null ||
+              matches(messageSearchText(_messageFromRow(row))))
+            row.conversationId,
+      };
+      return conversations.where((chat) {
+        final text = conversationSearchText?.call(chat) ?? [chat.title];
+        return text.any(matches) ||
+            matches(chat.handle) ||
+            matchingIds.contains(chat.id);
+      }).toList();
     });
+  }
+
+  Stream<List<ChatConversation>> _watchConversationPreviews() {
+    final conversations = _database.conversations;
+    final messages = _database.messages;
+    final pending = _database.alias(messages, 'pending');
+    // The outbox supplies a preview until acknowledgement. The confirmed
+    // preview can still advance when another message arrives or the list refreshes.
+    final latestPending = _database.selectOnly(messages)
+      ..addColumns([messages.id])
+      ..where(
+        messages.conversationId.equalsExp(conversations.id) &
+            messages.sequence.isNull() &
+            messages.clientMessageId.isNotNull(),
+      )
+      ..orderBy([
+        OrderingTerm.desc(messages.createdAt),
+        OrderingTerm.desc(messages.id),
+      ])
+      ..limit(1);
+    final previews =
+        _database.select(conversations).join([
+          leftOuterJoin(
+            pending,
+            pending.id.equalsExp(subqueryExpression(latestPending)),
+          ),
+        ])..orderBy([
+          OrderingTerm.desc(
+            coalesce([pending.createdAt, conversations.updatedAt]),
+          ),
+        ]);
+    return previews.watch().map(
+      (rows) => [
+        for (final row in rows)
+          _conversationFromRow(
+            row.readTable(conversations),
+            row.readTableOrNull(pending),
+          ),
+      ],
+    );
   }
 
   @override
@@ -128,25 +203,76 @@ class LocalFirstChatRepository implements ChatRepository {
   Future<void> refreshConversations() async {
     final api = _api;
     if (api == null) return;
-    final conversations = await api.listConversations();
-    await _database.batch((batch) {
-      batch.insertAllOnConflictUpdate(
-        _database.conversations,
-        conversations.map(_conversationCompanion).toList(),
-      );
-    });
+    await _storeConversations(await api.listConversations());
   }
+
+  Future<void> _storeConversations(
+    List<ChatConversation> conversations,
+  ) => _database.batch((batch) {
+    for (final conversation in conversations) {
+      final values = _conversationCompanion(conversation);
+      batch.insert(
+        _database.conversations,
+        values,
+        onConflict: DoUpdate<$ConversationsTable, Conversation>.withExcluded(
+          (row, incoming) {
+            // Edits and deletions change the preview without changing its sequence.
+            final usePreview = _canUpdatePreview(
+              row,
+              conversation.lastSequence,
+              conversation.lastMessageEditedAt?.millisecondsSinceEpoch,
+              conversation.lastMessageType == 'deleted',
+            );
+            Expression<T> preview<T extends Object>(
+              Expression<T> cached,
+              Expression<T> next,
+            ) => CaseWhenExpression(
+              cases: [CaseWhen(usePreview, then: next)],
+              orElse: cached,
+            );
+
+            return RawValuesInsertable({
+              ...values.toColumns(true),
+              row.lastMessageBody.name: preview(
+                row.lastMessageBody,
+                incoming.lastMessageBody,
+              ),
+              row.lastMessageType.name: preview(
+                row.lastMessageType,
+                incoming.lastMessageType,
+              ),
+              row.lastMessageAt.name: preview(
+                row.lastMessageAt,
+                incoming.lastMessageAt,
+              ),
+              row.lastMessageEditedAt.name: preview(
+                row.lastMessageEditedAt,
+                incoming.lastMessageEditedAt,
+              ),
+              row.lastReadSequence.name: FunctionCallExpression('max', [
+                row.lastReadSequence,
+                incoming.lastReadSequence,
+              ]),
+            });
+          },
+          where: (row, incoming) =>
+              row.lastSequence.isSmallerOrEqual(incoming.lastSequence),
+        ),
+      );
+    }
+  });
 
   @override
   Future<String> openDm(String userId) async {
     final api = _api;
     if (api == null) {
-      throw StateError('Connect to the messenger server to start a chat.');
+      throw const ApiException(
+        'messenger_server_required',
+        'Messenger server required',
+      );
     }
     final item = await api.openDm(userId);
-    await _database
-        .into(_database.conversations)
-        .insertOnConflictUpdate(_conversationCompanion(item));
+    await _storeConversations([item]);
     return item.id;
   }
 
@@ -265,11 +391,6 @@ class LocalFirstChatRepository implements ChatRepository {
               createdAt: now.millisecondsSinceEpoch,
             ),
           );
-      await _updateConversationPreview(
-        conversationId,
-        trimmed ?? _previewForType(type),
-        now,
-      );
     });
     if (_demoMode) {
       await Future<void>.delayed(const Duration(milliseconds: 420));
@@ -308,14 +429,16 @@ class LocalFirstChatRepository implements ChatRepository {
     final trimmed = body.trim();
     if (trimmed.isEmpty) return;
     if (_demoMode) {
-      await (_database.update(
+      final row = await (_database.select(
         _database.messages,
-      )..where((row) => row.id.equals(messageId))).write(
-        MessagesCompanion(
-          body: Value(trimmed),
-          editedAt: Value(DateTime.now().millisecondsSinceEpoch),
-        ),
-      );
+      )..where((row) => row.id.equals(messageId))).getSingleOrNull();
+      if (row != null) {
+        await _storeMessages([
+          _messageFromRow(
+            row,
+          ).copyWith(body: trimmed, editedAt: DateTime.now()),
+        ]);
+      }
       return;
     }
     final updated = await _api!.editMessage(messageId, trimmed);
@@ -325,14 +448,7 @@ class LocalFirstChatRepository implements ChatRepository {
   @override
   Future<void> deleteMessage(String messageId) async {
     if (!_demoMode) await _api!.deleteMessage(messageId);
-    await (_database.update(
-      _database.messages,
-    )..where((row) => row.id.equals(messageId))).write(
-      MessagesCompanion(
-        body: const Value(null),
-        deletedAt: Value(DateTime.now().millisecondsSinceEpoch),
-      ),
-    );
+    await _deleteCachedMessage(messageId);
   }
 
   @override
@@ -456,9 +572,8 @@ class LocalFirstChatRepository implements ChatRepository {
                 lastError: Value(error.toString()),
               ),
             );
-        await (_database.update(
-              _database.messages,
-            )..where((row) => row.clientMessageId.equals(item.clientMessageId)))
+        await (_database.update(_database.messages)
+              ..where((row) => row.id.equals('local:${item.clientMessageId}')))
             .write(const MessagesCompanion(status: Value('failed')));
       }
     }
@@ -466,21 +581,23 @@ class LocalFirstChatRepository implements ChatRepository {
 
   @override
   Future<void> markRead(String conversationId, int sequence) async {
-    final current = await (_database.select(
-      _database.conversations,
-    )..where((row) => row.id.equals(conversationId))).getSingleOrNull();
-    if (current != null && current.lastReadSequence >= sequence) return;
-    await (_database.update(_database.conversations)
-          ..where((row) => row.id.equals(conversationId)))
-        .write(ConversationsCompanion(lastReadSequence: Value(sequence)));
-    if (_demoMode) return;
+    final advanced = await _advanceReadMarker(conversationId, sequence);
+    if (_demoMode || advanced == 0) return;
     _realtime?.sendRead(conversationId, sequence);
     try {
       await _api?.markRead(conversationId, sequence);
     } catch (_) {
-      // The local marker remains monotonic and will be sent again on next open.
+      // Keep the local unread count even if the network update fails.
     }
   }
+
+  Future<int> _advanceReadMarker(String conversationId, int sequence) =>
+      (_database.update(_database.conversations)..where(
+            (row) =>
+                row.id.equals(conversationId) &
+                row.lastReadSequence.isSmallerThanValue(sequence),
+          ))
+          .write(ConversationsCompanion(lastReadSequence: Value(sequence)));
 
   @override
   void setTyping(String conversationId, bool typing) {
@@ -509,9 +626,7 @@ class LocalFirstChatRepository implements ChatRepository {
                   .getSingleOrNull() ==
               null) {
         final chat = await _api.conversation(message.conversationId);
-        await _database
-            .into(_database.conversations)
-            .insertOnConflictUpdate(_conversationCompanion(chat));
+        await _storeConversations([chat]);
       }
       await _storeMessages([message]);
       return;
@@ -532,13 +647,10 @@ class LocalFirstChatRepository implements ChatRepository {
         if (data['conversation_id'] != null) {
           await _storeMessages([ChatMessage.fromJson(data)]);
         } else {
-          await (_database.update(
-            _database.messages,
-          )..where((row) => row.id.equals(id))).write(
-            MessagesCompanion(
-              body: const Value(null),
-              deletedAt: Value(DateTime.now().millisecondsSinceEpoch),
-            ),
+          await _deleteCachedMessage(
+            id,
+            conversationId: data['conv'] as String?,
+            sequence: (data['seq'] as num?)?.toInt(),
           );
         }
       }
@@ -558,12 +670,9 @@ class LocalFirstChatRepository implements ChatRepository {
     if (event.type == 'read.update' && event.data is Map) {
       final data = Map<String, dynamic>.from(event.data! as Map);
       if (data['user'] == _accountId()) {
-        await (_database.update(
-          _database.conversations,
-        )..where((row) => row.id.equals(data['conv'].toString()))).write(
-          ConversationsCompanion(
-            lastReadSequence: Value((data['seq'] as num).toInt()),
-          ),
+        await _advanceReadMarker(
+          data['conv'].toString(),
+          (data['seq'] as num).toInt(),
         );
       }
       return;
@@ -589,112 +698,179 @@ class LocalFirstChatRepository implements ChatRepository {
     }
   }
 
-  Future<void> _storeMessages(List<ChatMessage> messages) async {
-    if (messages.isEmpty) return;
-    await _database.batch((batch) {
-      batch.insertAllOnConflictUpdate(
-        _database.messages,
-        messages.map(_messageCompanion).toList(),
-      );
-    });
-    for (final message in messages) {
-      await _updateConversationPreview(
-        message.conversationId,
-        message.deletedAt == null
-            ? message.body ?? _previewForType(message.type)
-            : 'Message deleted',
-        message.createdAt,
-        sequence: message.sequence,
-      );
-    }
+  Future<void> _storeMessages(List<ChatMessage> messages) =>
+      _database.batch((batch) {
+        for (final message in messages) {
+          _storeMessage(batch, message);
+        }
+      });
+
+  void _storeMessage(Batch batch, ChatMessage message) {
+    final values = _messageCompanion(message);
+    batch.insert(
+      _database.messages,
+      values,
+      onConflict: DoUpdate<$MessagesTable, Message>(
+        (_) => values,
+        where: (row) => _canUpdateMessage(
+          row.deletedAt.isNull(),
+          row.editedAt,
+          message.editedAt?.millisecondsSinceEpoch,
+          message.deletedAt != null,
+        ),
+      ),
+    );
+    _storeMessagePreview(batch, message);
   }
+
+  void _storeMessagePreview(Batch batch, ChatMessage message) {
+    final sequence = message.sequence;
+    if (sequence == null) return;
+    final timestamp = message.createdAt.millisecondsSinceEpoch;
+    final editedAt = message.editedAt?.millisecondsSinceEpoch;
+    batch.update(
+      _database.conversations,
+      ConversationsCompanion(
+        lastMessageBody: Value(message.deletedAt == null ? message.body : null),
+        lastMessageType: Value(message.generatedPreviewType),
+        lastMessageAt: Value(timestamp),
+        lastMessageEditedAt: Value(editedAt),
+        updatedAt: Value(timestamp),
+        lastSequence: Value(sequence),
+      ),
+      where: (row) =>
+          row.id.equals(message.conversationId) &
+          _canUpdatePreview(row, sequence, editedAt, message.deletedAt != null),
+    );
+  }
+
+  Expression<bool> _canUpdatePreview(
+    $ConversationsTable row,
+    int sequence,
+    int? editedAt,
+    bool deleted,
+  ) =>
+      row.lastSequence.isSmallerThanValue(sequence) |
+      (row.lastSequence.equals(sequence) &
+          _canUpdateMessage(
+            row.lastMessageType.isNotValue('deleted'),
+            row.lastMessageEditedAt,
+            editedAt,
+            deleted,
+          ));
+
+  Expression<bool> _canUpdateMessage(
+    Expression<bool> cachedIsLive,
+    Expression<int> cachedEdit,
+    int? editedAt,
+    bool deleted,
+  ) {
+    if (deleted) return const Constant(true);
+    final unedited = cachedEdit.isNull();
+    return cachedIsLive &
+        (editedAt == null
+            ? unedited
+            : unedited | cachedEdit.isSmallerOrEqualValue(editedAt));
+  }
+
+  Future<void> _deleteCachedMessage(
+    String id, {
+    String? conversationId,
+    int? sequence,
+  }) => _database.transaction(() async {
+    final row = await (_database.select(
+      _database.messages,
+    )..where((row) => row.id.equals(id))).getSingleOrNull();
+    if (row == null) {
+      // The inbox may have a preview for a conversation whose history was never opened.
+      if (conversationId != null && sequence != null) {
+        await (_database.update(_database.conversations)..where(
+              (chat) =>
+                  chat.id.equals(conversationId) &
+                  chat.lastSequence.equals(sequence),
+            ))
+            .write(
+              const ConversationsCompanion(
+                lastMessageBody: Value(null),
+                lastMessageType: Value('deleted'),
+              ),
+            );
+      }
+      return;
+    }
+    if (row.deletedAt != null) return;
+    final deletedAt = DateTime.now();
+    await (_database.update(
+      _database.messages,
+    )..where((row) => row.id.equals(id))).write(
+      MessagesCompanion(
+        body: const Value(null),
+        deletedAt: Value(deletedAt.millisecondsSinceEpoch),
+      ),
+    );
+    await _database.batch(
+      (batch) => _storeMessagePreview(
+        batch,
+        _messageFromRow(row).copyWith(deletedAt: deletedAt),
+      ),
+    );
+  });
 
   Future<void> _replaceOptimisticMessage(
     String clientMessageId,
     ChatMessage message,
-  ) async {
-    await _database.transaction(() async {
-      await (_database.delete(
-        _database.messages,
-      )..where((row) => row.id.equals('local:$clientMessageId'))).go();
-      await _database
-          .into(_database.messages)
-          .insertOnConflictUpdate(_messageCompanion(message));
-      await (_database.delete(
-        _database.outbox,
-      )..where((row) => row.clientMessageId.equals(clientMessageId))).go();
-      await _updateConversationPreview(
-        message.conversationId,
-        message.body ?? _previewForType(message.type),
-        message.createdAt,
-        sequence: message.sequence,
-      );
-    });
-  }
+  ) => _database.batch((batch) {
+    batch.deleteWhere(
+      _database.messages,
+      (row) => row.id.equals('local:$clientMessageId'),
+    );
+    _storeMessage(batch, message);
+    batch.deleteWhere(
+      _database.outbox,
+      (row) => row.clientMessageId.equals(clientMessageId),
+    );
+  });
 
-  Future<void> _markDemoSent(String clientMessageId) async {
+  Future<void> _markDemoSent(
+    String clientMessageId,
+  ) => _database.transaction(() async {
     final local = await (_database.select(
       _database.messages,
     )..where((row) => row.clientMessageId.equals(clientMessageId))).getSingle();
     final conversation = await (_database.select(
       _database.conversations,
     )..where((row) => row.id.equals(local.conversationId))).getSingle();
+    final sequence = conversation.lastSequence + 1;
     await (_database.update(
       _database.messages,
     )..where((row) => row.id.equals(local.id))).write(
-      MessagesCompanion(
-        sequence: Value(conversation.lastSequence + 1),
-        status: const Value('sent'),
-      ),
+      MessagesCompanion(sequence: Value(sequence), status: const Value('sent')),
     );
     await (_database.delete(
       _database.outbox,
     )..where((row) => row.clientMessageId.equals(clientMessageId))).go();
-    await (_database.update(
-      _database.conversations,
-    )..where((row) => row.id.equals(local.conversationId))).write(
-      ConversationsCompanion(
-        lastSequence: Value(conversation.lastSequence + 1),
+    await _database.batch(
+      (batch) => _storeMessagePreview(
+        batch,
+        _messageFromRow(local).copyWith(sequence: sequence),
       ),
     );
-  }
-
-  Future<void> _updateConversationPreview(
-    String conversationId,
-    String? body,
-    DateTime date, {
-    int? sequence,
-  }) async {
-    final current = await (_database.select(
-      _database.conversations,
-    )..where((row) => row.id.equals(conversationId))).getSingleOrNull();
-    if (current == null) return;
-    if (sequence != null && sequence < current.lastSequence) return;
-    if (current.lastMessageAt != null &&
-        date.millisecondsSinceEpoch < current.lastMessageAt!) {
-      return;
-    }
-    await (_database.update(
-      _database.conversations,
-    )..where((row) => row.id.equals(conversationId))).write(
-      ConversationsCompanion(
-        lastMessageBody: Value(body),
-        lastMessageAt: Value(date.millisecondsSinceEpoch),
-        updatedAt: Value(date.millisecondsSinceEpoch),
-        lastSequence: sequence == null ? const Value.absent() : Value(sequence),
-      ),
-    );
-  }
+  });
 
   ConversationsCompanion _conversationCompanion(ChatConversation item) =>
       ConversationsCompanion.insert(
         id: item.id,
         type: item.type.name,
         title: Value(item.title),
+        isSavedMessages: Value(item.isSavedMessages),
         handle: Value(item.handle),
         avatarId: Value(item.avatarId),
         lastMessageBody: Value(item.lastMessageBody),
+        lastMessageType: Value(item.lastMessageType),
         lastMessageAt: Value(item.lastMessageAt?.millisecondsSinceEpoch),
+        lastMessageEditedAt: Value(
+          item.lastMessageEditedAt?.millisecondsSinceEpoch,
+        ),
         description: Value(item.description),
         visibility: Value(item.visibility),
         ownerId: item.ownerId,
@@ -707,30 +883,44 @@ class LocalFirstChatRepository implements ChatRepository {
         updatedAt: item.updatedAt.millisecondsSinceEpoch,
       );
 
-  ChatConversation _conversationFromRow(Conversation row) => ChatConversation(
-    id: row.id,
-    type: ConversationType.values.firstWhere(
-      (type) => type.name == row.type,
-      orElse: () => ConversationType.dm,
-    ),
-    title: row.title ?? row.handle ?? 'Conversation',
-    handle: row.handle,
-    avatarId: row.avatarId,
-    description: row.description,
-    visibility: row.visibility,
-    ownerId: row.ownerId,
-    myRole: row.myRole,
-    memberCount: row.memberCount,
-    lastSequence: row.lastSequence,
-    lastReadSequence: row.lastReadSequence,
-    lastMessageBody: row.lastMessageBody,
-    lastMessageAt: row.lastMessageAt == null
-        ? null
-        : DateTime.fromMillisecondsSinceEpoch(row.lastMessageAt!),
-    isProfessorChannel: row.isProfessorChannel,
-    underReview: row.underReview,
-    updatedAt: DateTime.fromMillisecondsSinceEpoch(row.updatedAt),
-  );
+  ChatConversation _conversationFromRow(Conversation row, Message? pendingRow) {
+    final pending = pendingRow == null ? null : _messageFromRow(pendingRow);
+    return ChatConversation(
+      id: row.id,
+      type: ConversationType.values.firstWhere(
+        (type) => type.name == row.type,
+        orElse: () => ConversationType.dm,
+      ),
+      title: row.title ?? '',
+      isSavedMessages: row.isSavedMessages,
+      handle: row.handle,
+      avatarId: row.avatarId,
+      description: row.description,
+      visibility: row.visibility,
+      ownerId: row.ownerId,
+      myRole: row.myRole,
+      memberCount: row.memberCount,
+      lastSequence: row.lastSequence,
+      lastReadSequence: row.lastReadSequence,
+      lastMessageBody: pending == null ? row.lastMessageBody : pending.body,
+      lastMessageType: pending == null
+          ? row.lastMessageType
+          : pending.generatedPreviewType,
+      lastMessageAt:
+          pending?.createdAt ??
+          (row.lastMessageAt == null
+              ? null
+              : DateTime.fromMillisecondsSinceEpoch(row.lastMessageAt!)),
+      lastMessageEditedAt: pending != null || row.lastMessageEditedAt == null
+          ? pending?.editedAt
+          : DateTime.fromMillisecondsSinceEpoch(row.lastMessageEditedAt!),
+      isProfessorChannel: row.isProfessorChannel,
+      underReview: row.underReview,
+      updatedAt:
+          pending?.createdAt ??
+          DateTime.fromMillisecondsSinceEpoch(row.updatedAt),
+    );
+  }
 
   MessagesCompanion _messageCompanion(ChatMessage item) =>
       MessagesCompanion.insert(
@@ -815,6 +1005,7 @@ class LocalFirstChatRepository implements ChatRepository {
         lastSequence: 3,
         lastReadSequence: 2,
         lastMessageBody: 'I uploaded the practice set.',
+        lastMessageType: 'demo:study-3',
         lastMessageAt: now.subtract(const Duration(minutes: 8)),
         updatedAt: now.subtract(const Duration(minutes: 8)),
       ),
@@ -827,6 +1018,7 @@ class LocalFirstChatRepository implements ChatRepository {
         lastSequence: 2,
         lastReadSequence: 2,
         lastMessageBody: 'Office hours moved to 14:30.',
+        lastMessageType: 'demo:prof-2',
         lastMessageAt: now.subtract(const Duration(hours: 1)),
         isProfessorChannel: true,
         updatedAt: now.subtract(const Duration(hours: 1)),
@@ -841,6 +1033,7 @@ class LocalFirstChatRepository implements ChatRepository {
         lastSequence: 2,
         lastReadSequence: 2,
         lastMessageBody: 'See you at the library.',
+        lastMessageType: 'demo:sara-preview',
         lastMessageAt: now.subtract(const Duration(days: 1)),
         updatedAt: now.subtract(const Duration(days: 1)),
       ),
@@ -913,15 +1106,6 @@ class LocalFirstChatRepository implements ChatRepository {
     ).join();
     return '${DateTime.now().microsecondsSinceEpoch}-$suffix';
   }
-
-  String _previewForType(String type) => switch (type) {
-    'poll' => 'Poll',
-    'image' => 'Photo',
-    'video' => 'Video',
-    'voice' || 'audio' => 'Voice message',
-    'sticker' => 'Sticker',
-    _ => 'Attachment',
-  };
 
   @override
   Future<void> dispose() async {

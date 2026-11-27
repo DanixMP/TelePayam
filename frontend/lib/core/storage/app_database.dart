@@ -25,6 +25,8 @@ class Conversations extends Table {
   TextColumn get avatarId => text().nullable()();
   TextColumn get type => text()();
   TextColumn get title => text().nullable()();
+  BoolColumn get isSavedMessages =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get handle => text().nullable()();
   TextColumn get description => text().nullable()();
   TextColumn get visibility => text().withDefault(const Constant('private'))();
@@ -34,7 +36,9 @@ class Conversations extends Table {
   IntColumn get lastSequence => integer().withDefault(const Constant(0))();
   IntColumn get lastReadSequence => integer().withDefault(const Constant(0))();
   TextColumn get lastMessageBody => text().nullable()();
+  TextColumn get lastMessageType => text().nullable()();
   IntColumn get lastMessageAt => integer().nullable()();
+  IntColumn get lastMessageEditedAt => integer().nullable()();
   BoolColumn get isProfessorChannel =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get underReview => boolean().withDefault(const Constant(false))();
@@ -199,7 +203,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? openAppDatabase());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -228,6 +232,68 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from >= 2 && from < 4) {
         await migrator.addColumn(conversations, conversations.avatarId);
+      }
+      if (from >= 2 && from < 5) {
+        await transaction(() async {
+          await migrator.addColumn(
+            conversations,
+            conversations.isSavedMessages,
+          );
+          await migrator.addColumn(
+            conversations,
+            conversations.lastMessageType,
+          );
+          await migrator.addColumn(
+            conversations,
+            conversations.lastMessageEditedAt,
+          );
+          await customStatement('''
+            UPDATE conversations SET is_saved_messages = 1
+            WHERE type = 'dm' AND member_count = 1 AND title = 'Saved messages'
+          ''');
+          // Pending messages used to overwrite the stored preview. The inbox now
+          // shows them separately, so recover the last confirmed preview first.
+          await customStatement('''
+            UPDATE conversations AS c SET (last_message_body, last_message_at) = (
+              SELECT m.body, m.created_at FROM messages AS m
+              WHERE m.conversation_id = c.id AND m.sequence = c.last_sequence
+            ) WHERE EXISTS (
+              SELECT 1 FROM messages AS p WHERE p.conversation_id = c.id
+                AND p.sequence IS NULL AND p.client_message_id IS NOT NULL
+                AND p.created_at = c.last_message_at
+            )
+          ''');
+          // Older previews mixed message bodies with generated labels. Only use
+          // the matching cached message to tell which kind of text was stored.
+          await customStatement('''
+            UPDATE conversations AS c SET (last_message_type, last_message_edited_at) = (
+              SELECT CASE
+                WHEN m.deleted_at IS NOT NULL THEN 'deleted'
+                WHEN m.edited_at IS NULL AND (
+                  (c.id = 'demo-study' AND m.id = 'study-3') OR
+                  (c.id = 'demo-professor' AND m.id = 'prof-2')
+                ) THEN 'demo:' || m.id
+                WHEN m.body IS NULL OR m.body = '' THEN m.type
+              END, m.edited_at
+              FROM messages AS m
+              WHERE m.conversation_id = c.id AND m.created_at = c.last_message_at
+                AND m.sequence = c.last_sequence
+            ) WHERE c.last_message_at IS NOT NULL
+          ''');
+          await customStatement('''
+            UPDATE conversations AS c SET last_message_body = (
+              SELECT m.body FROM messages AS m
+              WHERE m.conversation_id = c.id AND m.created_at = c.last_message_at
+                AND m.sequence = c.last_sequence
+            ) WHERE c.last_message_edited_at IS NOT NULL
+                AND c.last_message_type IS NOT 'deleted'
+          ''');
+          await customStatement('''
+            UPDATE conversations SET last_message_type = 'demo:sara-preview'
+            WHERE id = 'demo-sara' AND last_sequence = 2
+              AND last_message_body = 'See you at the library.'
+          ''');
+        });
       }
     },
   );

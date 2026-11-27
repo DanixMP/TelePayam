@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/core/widgets/async_primary_button.dart';
 import 'package:university_messenger/core/widgets/auth_scaffold.dart';
 import 'package:university_messenger/core/widgets/auth_steps.dart';
+import 'package:university_messenger/features/settings/settings_screen.dart';
 import 'package:university_messenger/l10n/localization_extensions.dart';
 
-class WelcomeScreen extends ConsumerWidget {
+class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final settings = ref.watch(settingsControllerProvider);
     return AuthScaffold(
       title: l10n.welcomeTitle,
       description: l10n.welcomeBody,
@@ -21,16 +19,10 @@ class WelcomeScreen extends ConsumerWidget {
       currentStep: 0,
       actions: [
         IconButton(
-          onPressed: settings.toggleLocale,
-          tooltip: l10n.languageTooltip,
+          tooltip: l10n.settings,
           color: Colors.white,
-          icon: const Icon(Icons.translate_rounded),
-        ),
-        IconButton(
-          onPressed: settings.cycleTheme,
-          tooltip: l10n.themeTooltip,
-          color: Colors.white,
-          icon: const Icon(Icons.brightness_6_rounded),
+          icon: const Icon(Icons.settings_outlined),
+          onPressed: () => context.push(SettingsScreen.path),
         ),
       ],
       child: Column(
@@ -61,20 +53,8 @@ class WelcomeScreen extends ConsumerWidget {
           const SizedBox(height: 30),
           AsyncPrimaryButton(
             label: l10n.continueLabel,
-            icon: Directionality.of(context) == TextDirection.rtl
-                ? Icons.arrow_back_rounded
-                : Icons.arrow_forward_rounded,
+            icon: Icons.arrow_forward_rounded,
             onPressed: () => context.go('/phone'),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: settings.toggleLocale,
-            icon: const Icon(Icons.language_rounded),
-            label: Text(
-              settings.locale.languageCode == 'fa'
-                  ? l10n.english
-                  : l10n.persian,
-            ),
           ),
         ],
       ),

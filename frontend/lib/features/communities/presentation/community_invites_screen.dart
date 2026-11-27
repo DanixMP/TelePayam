@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:university_messenger/core/utils/validators.dart';
 import 'package:university_messenger/features/communities/data/community_api.dart';
 import 'package:university_messenger/features/communities/domain/community_models.dart';
 import 'package:university_messenger/features/communities/presentation/community_widgets.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class CommunityInvitesScreen extends ConsumerStatefulWidget {
   const CommunityInvitesScreen({required this.conversationId, super.key});
@@ -67,7 +69,9 @@ class _CommunityInvitesScreenState
       await _showToken(invite.token!);
       await _load();
     } catch (error) {
-      if (mounted) showCommunityMessage(context, communityErrorText(error));
+      if (mounted) {
+        showCommunityMessage(context, communityErrorText(context, error));
+      }
     } finally {
       if (mounted) setState(() => _creating = false);
     }
@@ -78,12 +82,12 @@ class _CommunityInvitesScreenState
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Invite link created'),
+        title: Text(context.l10n.communityInviteCreated),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Copy this token now. It will not be shown again.'),
+            Text(context.l10n.communityCopyInviteHelp),
             const SizedBox(height: 16),
             SelectableText(
               token,
@@ -97,15 +101,18 @@ class _CommunityInvitesScreenState
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: token));
               if (context.mounted) {
-                showCommunityMessage(context, 'Invite token copied.');
+                showCommunityMessage(
+                  context,
+                  context.l10n.communityInviteCopied,
+                );
               }
             },
             icon: const Icon(Icons.copy_rounded),
-            label: const Text('Copy'),
+            label: Text(context.l10n.copy),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Done'),
+            child: Text(context.l10n.done),
           ),
         ],
       ),
@@ -113,11 +120,12 @@ class _CommunityInvitesScreenState
   }
 
   Future<void> _revoke(CommunityInvite invite) async {
+    final l10n = context.l10n;
     final confirmed = await confirmCommunityAction(
       context,
-      title: 'Revoke invite?',
-      body: 'This invite will stop working immediately.',
-      confirmLabel: 'Revoke',
+      title: l10n.communityRevokeInviteTitle,
+      body: l10n.communityRevokeInviteBody,
+      confirmLabel: l10n.communityRevokeInvite,
       destructive: true,
     );
     if (!confirmed || !mounted) return;
@@ -130,10 +138,12 @@ class _CommunityInvitesScreenState
             inviteId: invite.id,
           );
       if (!mounted) return;
-      showCommunityMessage(context, 'Invite revoked.');
+      showCommunityMessage(context, context.l10n.communityInviteRevoked);
       await _load();
     } catch (error) {
-      if (mounted) showCommunityMessage(context, communityErrorText(error));
+      if (mounted) {
+        showCommunityMessage(context, communityErrorText(context, error));
+      }
     } finally {
       if (mounted) setState(() => _revoking.remove(invite.id));
     }
@@ -142,10 +152,10 @@ class _CommunityInvitesScreenState
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Invite links'),
+      title: Text(context.l10n.communityInviteLinks),
       actions: [
         IconButton(
-          tooltip: 'Create invite',
+          tooltip: context.l10n.communityCreateInvite,
           onPressed: _creating ? null : _create,
           icon: const Icon(Icons.add_link_rounded),
         ),
@@ -166,29 +176,30 @@ class _CommunityInvitesScreenState
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : const Icon(Icons.add_link_rounded),
-      label: const Text('Create invite'),
+      label: Text(context.l10n.communityCreateInvite),
     ),
   );
 
   Widget _buildBody() {
+    final l10n = context.l10n;
     if (_loading && _invites == null) {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null && _invites == null) {
       return CommunityStateMessage(
         icon: Icons.cloud_off_rounded,
-        title: 'Could not load invites',
-        body: communityErrorText(_error!),
-        actionLabel: 'Try again',
+        title: l10n.communityLoadInvitesError,
+        body: communityErrorText(context, _error),
+        actionLabel: l10n.tryAgain,
         onAction: _load,
       );
     }
     final invites = _invites ?? const <CommunityInvite>[];
     if (invites.isEmpty) {
-      return const CommunityStateMessage(
+      return CommunityStateMessage(
         icon: Icons.link_off_rounded,
-        title: 'No invite links',
-        body: 'Create a limited invite for this community.',
+        title: l10n.communityNoInvites,
+        body: l10n.communityNoInvitesBody,
       );
     }
     return RefreshIndicator(
@@ -212,7 +223,7 @@ class _CommunityInvitesScreenState
                   active ? Icons.link_rounded : Icons.link_off_rounded,
                 ),
               ),
-              title: Text(active ? 'Active invite' : _inactiveLabel(invite)),
+              title: Text(_inviteStatus(context, invite)),
               subtitle: Text(_inviteDetails(context, invite)),
               isThreeLine: true,
               trailing: active
@@ -222,7 +233,7 @@ class _CommunityInvitesScreenState
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : IconButton(
-                            tooltip: 'Revoke invite',
+                            tooltip: l10n.communityRevokeInvite,
                             onPressed: () => _revoke(invite),
                             icon: const Icon(Icons.link_off_rounded),
                           )
@@ -252,7 +263,7 @@ class _CreateInviteDialog extends StatefulWidget {
 class _CreateInviteDialogState extends State<_CreateInviteDialog> {
   final _usesController = TextEditingController();
   int? _expiresInHours = 168;
-  String? _usesError;
+  bool _usesInvalid = false;
 
   @override
   void dispose() {
@@ -262,10 +273,10 @@ class _CreateInviteDialogState extends State<_CreateInviteDialog> {
 
   void _submit() {
     final text = _usesController.text.trim();
-    final uses = text.isEmpty ? null : int.tryParse(text);
+    final uses = text.isEmpty ? null : int.tryParse(asciiDigits(text));
     if (uses != null && (uses < 1 || uses > 10000) ||
         text.isNotEmpty && uses == null) {
-      setState(() => _usesError = 'Enter a number from 1 to 10000.');
+      setState(() => _usesInvalid = true);
       return;
     }
     Navigator.pop(
@@ -276,18 +287,32 @@ class _CreateInviteDialogState extends State<_CreateInviteDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Create invite link'),
+    title: Text(context.l10n.communityCreateInvite),
     content: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         DropdownButtonFormField<int?>(
           initialValue: _expiresInHours,
-          decoration: const InputDecoration(labelText: 'Expires after'),
-          items: const [
-            DropdownMenuItem(value: 24, child: Text('24 hours')),
-            DropdownMenuItem(value: 168, child: Text('7 days')),
-            DropdownMenuItem(value: 720, child: Text('30 days')),
-            DropdownMenuItem(value: null, child: Text('Never')),
+          decoration: InputDecoration(
+            labelText: context.l10n.communityExpiresAfter,
+          ),
+          items: [
+            DropdownMenuItem(
+              value: 24,
+              child: Text(context.l10n.communityExpiryOneDay),
+            ),
+            DropdownMenuItem(
+              value: 168,
+              child: Text(context.l10n.communityExpiryOneWeek),
+            ),
+            DropdownMenuItem(
+              value: 720,
+              child: Text(context.l10n.communityExpiryThirtyDays),
+            ),
+            DropdownMenuItem(
+              value: null,
+              child: Text(context.l10n.communityNeverExpires),
+            ),
           ],
           onChanged: (value) => setState(() => _expiresInHours = value),
         ),
@@ -296,8 +321,10 @@ class _CreateInviteDialogState extends State<_CreateInviteDialog> {
           controller: _usesController,
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
-            labelText: 'Maximum uses (optional)',
-            errorText: _usesError,
+            labelText: context.l10n.communityMaxUses,
+            errorText: _usesInvalid
+                ? context.l10n.communityMaxUsesInvalid
+                : null,
           ),
         ),
       ],
@@ -305,25 +332,34 @@ class _CreateInviteDialogState extends State<_CreateInviteDialog> {
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
+        child: Text(context.l10n.cancel),
       ),
-      FilledButton(onPressed: _submit, child: const Text('Create')),
+      FilledButton(onPressed: _submit, child: Text(context.l10n.create)),
     ],
   );
 }
 
-String _inactiveLabel(CommunityInvite invite) {
-  if (invite.isRevoked) return 'Revoked invite';
-  if (invite.isExpired) return 'Expired invite';
-  return 'Used invite';
+String _inviteStatus(BuildContext context, CommunityInvite invite) {
+  final l10n = context.l10n;
+  if (invite.isRevoked) return l10n.communityRevokedInvite;
+  if (invite.isExpired) return l10n.communityExpiredInvite;
+  if (invite.isExhausted) return l10n.communityUsedInvite;
+  return l10n.communityActiveInvite;
 }
 
 String _inviteDetails(BuildContext context, CommunityInvite invite) {
-  final uses = invite.maxUses == null
-      ? '${invite.uses} uses'
-      : '${invite.uses} of ${invite.maxUses} uses';
-  final expiry = invite.expiresAt == null
-      ? 'No expiry'
-      : 'Expires ${MaterialLocalizations.of(context).formatMediumDate(invite.expiresAt!.toLocal())}';
+  final l10n = context.l10n;
+  final maxUses = invite.maxUses;
+  final expiresAt = invite.expiresAt;
+  final uses = maxUses == null
+      ? l10n.communityInviteUses(invite.uses)
+      : l10n.communityInviteUsesOf(invite.uses, maxUses);
+  final expiry = expiresAt == null
+      ? l10n.communityNeverExpires
+      : l10n.communityInviteExpires(
+          MaterialLocalizations.of(
+            context,
+          ).formatMediumDate(expiresAt.toLocal()),
+        );
   return '$uses\n$expiry';
 }

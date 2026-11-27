@@ -1,7 +1,11 @@
 import 'package:university_messenger/features/chats/domain/chat_models.dart';
 
 abstract interface class ChatRepository {
-  Stream<List<ChatConversation>> watchConversations({String query = ''});
+  Stream<List<ChatConversation>> watchConversations({
+    String query = '',
+    Iterable<String?> Function(ChatConversation)? conversationSearchText,
+    String? Function(ChatMessage)? messageSearchText,
+  });
   Stream<List<ChatMessage>> watchMessages(String conversationId);
   Stream<Set<String>> watchTypingUsers(String conversationId);
 

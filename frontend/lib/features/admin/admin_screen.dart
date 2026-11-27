@@ -6,6 +6,7 @@ import 'package:university_messenger/core/network/api_exception.dart';
 import 'package:university_messenger/core/utils/validators.dart';
 import 'package:university_messenger/features/admin/admin_api.dart';
 import 'package:university_messenger/features/auth/domain/account.dart';
+import 'package:university_messenger/features/settings/settings_screen.dart';
 import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
@@ -105,6 +106,11 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         title: Text(superAdmin ? l.superAdminPanel : l.adminPanel),
         actions: [
           IconButton(
+            tooltip: l.settings,
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => context.push(SettingsScreen.path),
+          ),
+          IconButton(
             tooltip: l.refreshRequests,
             icon: const Icon(Icons.refresh),
             onPressed: queue.isLoading
@@ -203,7 +209,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                                         : student.name,
                                   ),
                                   subtitle: Text(
-                                    '${student.degree} · ${student.department}\n${l.universityId}: \u2066${student.universityId}\u2069\n${l.nationalId}: \u2066${student.maskedNationalId}\u2069',
+                                    '${localizedDegree(l, student.degree)} · ${student.department}\n${l.universityId}: \u2066${student.universityId}\u2069\n${l.nationalId}: \u2066${student.maskedNationalId}\u2069',
                                   ),
                                 ),
                                 Padding(

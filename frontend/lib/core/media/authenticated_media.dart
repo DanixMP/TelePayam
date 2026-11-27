@@ -2,9 +2,12 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/core/media/media_client.dart';
 import 'package:university_messenger/core/media/playback.dart';
+import 'package:university_messenger/l10n/generated/app_localizations.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class AuthenticatedMediaTile extends ConsumerStatefulWidget {
   const AuthenticatedMediaTile({
@@ -36,9 +39,10 @@ class _AuthenticatedMediaTileState
 
   Future<({MediaResource resource, Uint8List? bytes})> _load() async {
     final client = ref.read(mediaClientProvider);
-    final resource = await client.metadata(widget.mediaId);
+    final id = widget.mediaId;
+    final resource = await client.metadata(id);
     final bytes = resource.kind == 'image' || resource.kind == 'gif'
-        ? await client.download(widget.mediaId)
+        ? await client.download(id)
         : null;
     return (resource: resource, bytes: bytes);
   }
@@ -49,18 +53,18 @@ class _AuthenticatedMediaTileState
     try {
       final path = await ref
           .read(mediaClientProvider)
-          .save(widget.mediaId, resource: resource);
+          .save(
+            resource.id,
+            resource: resource,
+            fallbackName: '${context.l10n.attachment}-${resource.id}',
+          );
       if (mounted && path != null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Saved to $path')));
+        _showFeedback((l10n) => l10n.mediaSavedTo('\u2068$path\u2069'));
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not save this attachment. Try again.'),
-          ),
+        _showFeedback(
+          (l10n) => localizedMediaError(l10n, error, l10n.mediaSaveFailed),
         );
       }
     } finally {
@@ -68,14 +72,23 @@ class _AuthenticatedMediaTileState
     }
   }
 
+  void _showFeedback(String Function(AppLocalizations) message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Builder(builder: (context) => Text(message(context.l10n))),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder(
     future: _media,
     builder: (context, snapshot) {
+      final l10n = context.l10n;
       if (snapshot.hasError) {
         return TextButton.icon(
           icon: const Icon(Icons.refresh),
-          label: const Text('Retry attachment'),
+          label: Text(l10n.retryAttachment),
           onPressed: () => setState(() => _media = _load()),
         );
       }
@@ -86,6 +99,8 @@ class _AuthenticatedMediaTileState
         );
       }
       final data = snapshot.data!;
+      final resource = data.resource;
+      final filename = resource.originalName;
       if (data.bytes case final bytes?) {
         final image = Image.memory(
           bytes,
@@ -94,16 +109,16 @@ class _AuthenticatedMediaTileState
         );
         return Semantics(
           button: true,
-          label:
-              widget.label ?? data.resource.originalName ?? 'Image attachment',
+          label: widget.label ?? filename ?? l10n.imageAttachment,
           child: InkWell(
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
                 fullscreenDialog: true,
                 builder: (_) => _ImageViewer(
                   bytes: bytes,
-                  title: widget.label ?? data.resource.originalName,
-                  onSave: () => _save(data.resource),
+                  filename: filename,
+                  kind: resource.kind,
+                  onSave: () => _save(resource),
                 ),
               ),
             ),
@@ -120,8 +135,7 @@ class _AuthenticatedMediaTileState
         );
       }
       return ListTile(
-        onTap:
-            _saving || !['audio', 'voice', 'video'].contains(data.resource.kind)
+        onTap: _saving || !['audio', 'voice', 'video'].contains(resource.kind)
             ? null
             : () async {
                 if (_saving) return;
@@ -129,40 +143,35 @@ class _AuthenticatedMediaTileState
                 try {
                   final bytes = await ref
                       .read(mediaClientProvider)
-                      .download(widget.mediaId);
+                      .download(resource.id);
                   if (context.mounted) {
                     await playMedia(
                       context,
                       bytes,
-                      data.resource.mime,
-                      data.resource.originalName ?? 'Media',
+                      resource.mime,
+                      kind: resource.kind,
+                      filename: filename,
                     );
                   }
                 } catch (_) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Playback unavailable. Try downloading the attachment.',
-                        ),
-                      ),
-                    );
+                    _showFeedback((l10n) => l10n.mediaPlaybackUnavailable);
                   }
                 } finally {
                   if (mounted) setState(() => _saving = false);
                 }
               },
         contentPadding: EdgeInsets.zero,
-        leading: CircleAvatar(child: Icon(_icon(data.resource.kind))),
+        leading: CircleAvatar(child: Icon(_icon(resource.kind))),
         title: Text(
-          data.resource.originalName ?? widget.label ?? data.resource.kind,
+          filename ?? widget.label ?? localizedMessageType(l10n, resource.kind),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        subtitle: Text(_formatBytes(data.resource.size)),
+        subtitle: Text(_formatBytes(l10n, resource.size)),
         trailing: IconButton(
-          onPressed: _saving ? null : () => _save(data.resource),
-          tooltip: 'Download',
+          onPressed: _saving ? null : () => _save(resource),
+          tooltip: l10n.download,
           icon: _saving
               ? const SizedBox.square(
                   dimension: 20,
@@ -176,10 +185,16 @@ class _AuthenticatedMediaTileState
 }
 
 class _ImageViewer extends StatelessWidget {
-  const _ImageViewer({required this.bytes, required this.onSave, this.title});
+  const _ImageViewer({
+    required this.bytes,
+    required this.onSave,
+    required this.kind,
+    this.filename,
+  });
 
   final Uint8List bytes;
-  final String? title;
+  final String? filename;
+  final String kind;
   final VoidCallback onSave;
 
   @override
@@ -188,16 +203,23 @@ class _ImageViewer extends StatelessWidget {
     appBar: AppBar(
       backgroundColor: Colors.black,
       foregroundColor: Colors.white,
-      title: Text(title ?? 'Media'),
+      title: Text(filename ?? localizedMessageType(context.l10n, kind)),
       actions: [
         IconButton(
           onPressed: onSave,
-          tooltip: 'Download',
+          tooltip: context.l10n.download,
           icon: const Icon(Icons.download_outlined),
         ),
       ],
     ),
-    body: Center(child: InteractiveViewer(child: Image.memory(bytes))),
+    body: Center(
+      child: InteractiveViewer(
+        child: Image.memory(
+          bytes,
+          semanticLabel: filename ?? context.l10n.imageAttachment,
+        ),
+      ),
+    ),
   );
 }
 
@@ -208,8 +230,18 @@ IconData _icon(String kind) => switch (kind) {
   _ => Icons.insert_drive_file_outlined,
 };
 
-String _formatBytes(int bytes) {
-  if (bytes < 1024) return '$bytes B';
-  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+String _formatBytes(AppLocalizations l10n, int bytes) {
+  if (bytes < 1024) {
+    return l10n.mediaBytes(
+      NumberFormat.decimalPattern(l10n.localeName).format(bytes),
+    );
+  }
+  final decimal = NumberFormat.decimalPatternDigits(
+    locale: l10n.localeName,
+    decimalDigits: 1,
+  );
+  if (bytes < 1024 * 1024) {
+    return l10n.mediaKilobytes(decimal.format(bytes / 1024));
+  }
+  return l10n.mediaMegabytes(decimal.format(bytes / (1024 * 1024)));
 }

@@ -103,17 +103,18 @@ async def complete_professor(
     user.last_name = payload.last_name.strip()
     user.handle = user.handle or await available_handle(db, user)
     user.status = AccountStatus.ACTIVE.value
+    professor_name = f"{user.first_name} {user.last_name}"
     channel = Conversation(
         type=ConversationType.CHANNEL.value,
         visibility=Visibility.PUBLIC.value,
-        title=f"{payload.title} {user.first_name} {user.last_name}",
-        description=f"Official channel for {user.first_name} {user.last_name}",
+        title=f"{payload.title} {professor_name}",
+        description=f"Official channel for {professor_name}",
         owner_id=user.id,
         member_count=1,
         is_professor_channel=True,
         created_by_role=UserRole.PROFESSOR.value,
         audience="students",
-        settings={},
+        settings={"official_description_name": professor_name},
     )
     channel.handle = await available_handle(db, user, "channel")
     db.add(channel)

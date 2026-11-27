@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:university_messenger/app/providers.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 final mediaBytesProvider = FutureProvider.autoDispose.family<Uint8List, String>(
   (ref, id) {
@@ -39,7 +40,7 @@ class MediaThumbnail extends ConsumerWidget {
           ),
         ),
         error: (_, _) => IconButton(
-          tooltip: 'Retry image',
+          tooltip: context.l10n.retryImage,
           icon: const Icon(Icons.refresh),
           onPressed: () => ref.invalidate(mediaBytesProvider(id)),
         ),
@@ -62,7 +63,7 @@ class ContactAvatar extends StatelessWidget {
       : ClipOval(
           child: SizedBox.square(
             dimension: radius * 2,
-            child: MediaThumbnail(id!, label: 'Profile photo'),
+            child: MediaThumbnail(id!, label: context.l10n.profilePhoto),
           ),
         );
 }

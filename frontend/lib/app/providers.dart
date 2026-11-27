@@ -11,10 +11,12 @@ import 'package:university_messenger/features/auth/data/api_auth_repository.dart
 import 'package:university_messenger/features/auth/data/demo_auth_repository.dart';
 import 'package:university_messenger/features/auth/domain/auth_repository.dart';
 import 'package:university_messenger/features/auth/presentation/auth_controller.dart';
+import 'package:university_messenger/features/chats/chat_strings.dart';
 import 'package:university_messenger/features/chats/data/chat_api.dart';
 import 'package:university_messenger/features/chats/data/local_first_chat_repository.dart';
 import 'package:university_messenger/features/chats/domain/chat_models.dart';
 import 'package:university_messenger/features/chats/domain/chat_repository.dart';
+import 'package:university_messenger/l10n/generated/app_localizations.dart';
 
 final settingsControllerProvider = ChangeNotifierProvider<SettingsController>(
   (ref) => SettingsController(store: SecureAppSettingsStore()),
@@ -80,9 +82,27 @@ final chatInitializationProvider = FutureProvider.autoDispose<void>(
 final chatSearchProvider = StateProvider.autoDispose<String>((ref) => '');
 
 final conversationsProvider =
+    StreamProvider.autoDispose<List<ChatConversation>>(
+      (ref) => ref.watch(chatRepositoryProvider).watchConversations(),
+    );
+
+final chatSearchResultsProvider =
     StreamProvider.autoDispose<List<ChatConversation>>((ref) {
       final query = ref.watch(chatSearchProvider);
-      return ref.watch(chatRepositoryProvider).watchConversations(query: query);
+      final locale = ref.watch(
+        settingsControllerProvider.select((settings) => settings.locale),
+      );
+      final l10n = lookupAppLocalizations(locale);
+      return ref
+          .watch(chatRepositoryProvider)
+          .watchConversations(
+            query: query,
+            conversationSearchText: (chat) => [
+              chatTitle(l10n, chat),
+              chatPreview(l10n, chat),
+            ],
+            messageSearchText: (message) => chatMessageBody(l10n, message),
+          );
     });
 
 final messagesProvider = StreamProvider.autoDispose

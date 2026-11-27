@@ -4,8 +4,8 @@ import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/features/calls/domain/call_models.dart';
 import 'package:university_messenger/features/calls/presentation/call_controller.dart';
 import 'package:university_messenger/features/calls/presentation/call_providers.dart';
-import 'package:university_messenger/features/calls/presentation/call_strings.dart';
 import 'package:university_messenger/features/calls/presentation/call_widgets.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class CallHistoryScreen extends ConsumerWidget {
   const CallHistoryScreen({this.onBack, this.onCallSelected, super.key});
@@ -26,7 +26,7 @@ class CallHistoryScreen extends ConsumerWidget {
           tooltip: MaterialLocalizations.of(context).backButtonTooltip,
           icon: const Icon(Icons.arrow_back_rounded),
         ),
-        title: const Text(CallStrings.history),
+        title: Text(context.l10n.callHistory),
       ),
       body: SafeArea(
         top: false,
@@ -96,7 +96,7 @@ class _EmptyCallHistory extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         Text(
-          CallStrings.noCalls,
+          context.l10n.callNoCalls,
           textAlign: TextAlign.center,
           style: Theme.of(
             context,
@@ -104,7 +104,7 @@ class _EmptyCallHistory extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          CallStrings.noCallsBody,
+          context.l10n.callNoCallsBody,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -134,8 +134,8 @@ class _CallHistoryTile extends StatelessWidget {
         (call.status == CallStatus.declined || call.startedAt == null);
     final scheme = Theme.of(context).colorScheme;
     final title = call.kind == CallKind.video
-        ? CallStrings.videoCall
-        : CallStrings.audioCall;
+        ? context.l10n.callVideoCall
+        : context.l10n.callAudioCall;
     final direction = incoming
         ? Icons.call_received_rounded
         : Icons.call_made_rounded;
@@ -179,6 +179,7 @@ class _CallHistoryTile extends StatelessWidget {
 }
 
 String _historyDetail(BuildContext context, CallSession call, bool missed) {
+  final l10n = context.l10n;
   final date = MaterialLocalizations.of(
     context,
   ).formatShortDate(call.createdAt.toLocal());
@@ -187,15 +188,15 @@ String _historyDetail(BuildContext context, CallSession call, bool missed) {
     alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
   );
   final status = missed
-      ? CallStrings.missed
+      ? l10n.callMissed
       : call.status == CallStatus.declined
-      ? CallStrings.declined
+      ? l10n.callDeclined
       : call.status == CallStatus.active
-      ? CallStrings.connected
+      ? l10n.callConnected
       : call.status == CallStatus.ringing
-      ? CallStrings.ringing
+      ? l10n.callRinging
       : call.startedAt != null && call.endedAt != null
-      ? formatCallDuration(call.endedAt!.difference(call.startedAt!))
-      : CallStrings.callEnded;
-  return '$status · $date, $time';
+      ? formatCallDuration(context, call.endedAt!.difference(call.startedAt!))
+      : l10n.callCallEnded;
+  return '$status · ${l10n.dateAndTime(date, time)}';
 }

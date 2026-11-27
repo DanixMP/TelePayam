@@ -1,17 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:university_messenger/features/calls/presentation/call_providers.dart';
-import 'package:university_messenger/features/calls/presentation/call_strings.dart';
 import 'package:university_messenger/features/calls/presentation/call_widgets.dart';
 
 class ActiveCallScreen extends ConsumerWidget {
-  const ActiveCallScreen({
-    this.peerName = CallStrings.unknownCaller,
-    this.onClosed,
-    super.key,
-  });
+  const ActiveCallScreen({this.peerName, this.onClosed, super.key});
 
-  final String peerName;
+  final String? peerName;
   final VoidCallback? onClosed;
 
   @override

@@ -16,6 +16,7 @@ from app.db.models import (
     DmPair,
     InviteLink,
     Message,
+    ProfessorProfile,
     Report,
     ReportAccessGrant,
     User,
@@ -81,15 +82,29 @@ async def conversation_out(
             .where(DmPair.conversation_id == conversation.id)
         )
         if peer:
+            is_saved_messages = peer.id == member.user_id
             details.update(
+                is_saved_messages=is_saved_messages,
                 title=(
                     "Saved messages"
-                    if peer.id == member.user_id
+                    if is_saved_messages
                     else " ".join(filter(None, (peer.first_name, peer.last_name))) or peer.handle
                 ),
                 handle=peer.handle,
                 avatar_id=peer.avatar_id,
             )
+    if conversation.is_professor_channel:
+        settings = conversation.settings or {}
+        if "official_description_name" in settings:
+            details["official_description_name"] = settings["official_description_name"]
+        elif (conversation.description or "").startswith("Official channel for "):
+            # Older auto-created channels stored only the generated English description.
+            owner = await db.get(User, conversation.owner_id)
+            profile = await db.get(ProfessorProfile, conversation.owner_id)
+            if owner and profile and profile.channel_id == conversation.id:
+                name = f"{owner.first_name} {owner.last_name}"
+                if conversation.description == f"Official channel for {name}":
+                    details["official_description_name"] = name
     if member and conversation.last_seq:
         viewer = await db.get(User, member.user_id)
         if viewer and viewer.role in {UserRole.STUDENT, UserRole.PROFESSOR}:
@@ -99,15 +114,22 @@ async def conversation_out(
                 )
             )
             if last:
+                if last.deleted_at:
+                    preview_body, preview_type = "Message deleted", "deleted"
+                elif last.body_enc:
+                    preview_body = decrypt_text(last.body_enc, get_settings())[:160]
+                    preview_type = None
+                else:
+                    preview_body, preview_type = last.type.title(), last.type
                 details.update(
                     last_message_at=last.created_at,
-                    last_message_body=(
-                        "Message deleted"
-                        if last.deleted_at
-                        else decrypt_text(last.body_enc, get_settings())[:160]
-                        if last.body_enc
-                        else last.type.title()
+                    last_message_edited_at=(
+                        last.edited_at.replace(tzinfo=last.edited_at.tzinfo or UTC)
+                        if last.edited_at is not None
+                        else None
                     ),
+                    last_message_type=preview_type,
+                    last_message_body=preview_body,
                 )
     return ConversationOut.model_validate(conversation).model_copy(update=details)
 
@@ -372,6 +394,8 @@ async def update_conversation(
         changes["handle"] = await service.ensure_global_handle_available(
             db, changes["handle"], conversation.id
         )
+    if "description" in changes and conversation.is_professor_channel:
+        conversation.settings = {**(conversation.settings or {}), "official_description_name": None}
     for key, value in changes.items():
         setattr(conversation, key, value)
     await db.commit()

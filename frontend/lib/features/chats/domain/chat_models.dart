@@ -2,6 +2,8 @@ enum ConversationType { dm, group, channel }
 
 enum MessageDelivery { sending, sent, failed }
 
+const demoMessageIds = ['study-1', 'study-2', 'study-3', 'prof-1', 'prof-2'];
+
 class MediaAttachment {
   const MediaAttachment({
     required this.id,
@@ -68,6 +70,7 @@ class ChatStickerPack {
     required this.kind,
     required this.stickers,
     required this.isOfficial,
+    this.titleKey,
   });
 
   factory ChatStickerPack.fromJson(Map<String, dynamic> json) =>
@@ -75,6 +78,7 @@ class ChatStickerPack {
         id: json['id'].toString(),
         handle: json['handle']?.toString() ?? '',
         title: json['title']?.toString() ?? '',
+        titleKey: json['title_key'] as String?,
         kind: json['kind']?.toString() ?? 'static',
         isOfficial: json['is_official'] == true,
         stickers: (json['stickers'] as List<dynamic>? ?? const [])
@@ -88,6 +92,7 @@ class ChatStickerPack {
   final String id;
   final String handle;
   final String title;
+  final String? titleKey;
   final String kind;
   final bool isOfficial;
   final List<ChatSticker> stickers;
@@ -109,7 +114,10 @@ class ChatConversation {
     this.visibility = 'private',
     this.myRole,
     this.lastMessageBody,
+    this.lastMessageType,
     this.lastMessageAt,
+    this.lastMessageEditedAt,
+    this.isSavedMessages = false,
     this.isProfessorChannel = false,
     this.underReview = false,
   });
@@ -119,24 +127,28 @@ class ChatConversation {
       (value) => value.name == json['type'],
       orElse: () => ConversationType.dm,
     );
-    final fallbackTitle = switch (type) {
-      ConversationType.dm => json['handle']?.toString() ?? 'Direct message',
-      ConversationType.group => 'Group',
-      ConversationType.channel => 'Channel',
-    };
+    final title = json['title']?.toString() ?? '';
+    final memberCount = (json['member_count'] as num?)?.toInt() ?? 0;
     return ChatConversation(
       id: json['id'].toString(),
       type: type,
-      title: json['title']?.toString() ?? fallbackTitle,
+      title: title,
       handle: json['handle']?.toString(),
       avatarId: json['avatar_id'] as String?,
       lastMessageBody: json['last_message_body'] as String?,
+      lastMessageType: json['last_message_type'] as String?,
       lastMessageAt: _serverTime(json['last_message_at']),
+      lastMessageEditedAt: _serverTime(json['last_message_edited_at']),
       description: json['description']?.toString(),
       visibility: json['visibility']?.toString() ?? 'private',
       ownerId: json['owner_id'].toString(),
       myRole: json['my_role']?.toString(),
-      memberCount: (json['member_count'] as num?)?.toInt() ?? 0,
+      memberCount: memberCount,
+      isSavedMessages:
+          json['is_saved_messages'] as bool? ??
+          (type == ConversationType.dm &&
+              memberCount == 1 &&
+              title == 'Saved messages'),
       lastSequence: (json['last_seq'] as num?)?.toInt() ?? 0,
       lastReadSequence: (json['last_read_seq'] as num?)?.toInt() ?? 0,
       isProfessorChannel: json['is_professor_channel'] == true,
@@ -160,7 +172,10 @@ class ChatConversation {
   final int lastSequence;
   final int lastReadSequence;
   final String? lastMessageBody;
+  final String? lastMessageType;
   final DateTime? lastMessageAt;
+  final DateTime? lastMessageEditedAt;
+  final bool isSavedMessages;
   final bool isProfessorChannel;
   final bool underReview;
   final DateTime updatedAt;
@@ -182,7 +197,10 @@ class ChatConversation {
     visibility: visibility,
     myRole: myRole,
     lastMessageBody: lastMessageBody,
+    lastMessageType: lastMessageType,
     lastMessageAt: lastMessageAt,
+    lastMessageEditedAt: lastMessageEditedAt,
+    isSavedMessages: isSavedMessages,
     isProfessorChannel: isProfessorChannel,
     underReview: underReview,
   );
@@ -272,8 +290,8 @@ class ChatMessage {
         ? ChatPoll.fromJson(Map<String, dynamic>.from(json['poll'] as Map))
         : null,
     silent: json['silent'] == true,
-    editedAt: DateTime.tryParse(json['edited_at']?.toString() ?? ''),
-    deletedAt: DateTime.tryParse(json['deleted_at']?.toString() ?? ''),
+    editedAt: _serverTime(json['edited_at']),
+    deletedAt: _serverTime(json['deleted_at']),
     createdAt: _serverTime(json['created_at']) ?? DateTime.now(),
     delivery: MessageDelivery.sent,
   );
@@ -299,7 +317,14 @@ class ChatMessage {
 
   bool isMine(String? accountId) => senderId == accountId;
 
+  String? get generatedPreviewType {
+    if (deletedAt != null) return 'deleted';
+    if (editedAt == null && demoMessageIds.contains(id)) return 'demo:$id';
+    return body == null || body!.isEmpty ? type : null;
+  }
+
   ChatMessage copyWith({
+    int? sequence,
     String? body,
     Map<String, int>? reactions,
     ChatPoll? poll,
@@ -313,7 +338,7 @@ class ChatMessage {
     type: type,
     createdAt: createdAt,
     delivery: delivery ?? this.delivery,
-    sequence: sequence,
+    sequence: sequence ?? this.sequence,
     clientMessageId: clientMessageId,
     body: body ?? this.body,
     replyToId: replyToId,

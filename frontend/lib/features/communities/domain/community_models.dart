@@ -52,6 +52,7 @@ class CommunityConversation {
     required this.underReview,
     this.handle,
     this.description,
+    this.officialDescriptionName,
     this.myRole,
   });
 
@@ -65,6 +66,7 @@ class CommunityConversation {
         handle: json['handle']?.toString(),
         title: json['title']?.toString() ?? '',
         description: json['description']?.toString(),
+        officialDescriptionName: json['official_description_name'] as String?,
         ownerId: json['owner_id'].toString(),
         memberCount: (json['member_count'] as num?)?.toInt() ?? 0,
         lastSequence: (json['last_seq'] as num?)?.toInt() ?? 0,
@@ -86,6 +88,7 @@ class CommunityConversation {
   final String? handle;
   final String title;
   final String? description;
+  final String? officialDescriptionName;
   final String ownerId;
   final int memberCount;
   final int lastSequence;

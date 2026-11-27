@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:university_messenger/app/providers.dart';
+import 'package:university_messenger/core/utils/validators.dart';
 import 'package:university_messenger/features/communities/data/community_api.dart';
 import 'package:university_messenger/features/communities/domain/community_models.dart';
 import 'package:university_messenger/features/communities/presentation/community_widgets.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class CommunityEditScreen extends ConsumerStatefulWidget {
   const CommunityEditScreen({required this.conversation, super.key});
@@ -20,9 +22,8 @@ class _CommunityEditScreenState extends ConsumerState<CommunityEditScreen> {
   late final _titleController = TextEditingController(
     text: widget.conversation.title,
   );
-  late final _descriptionController = TextEditingController(
-    text: widget.conversation.description,
-  );
+  final _descriptionController = TextEditingController();
+  String? _shownDescription;
   late final _handleController = TextEditingController(
     text: widget.conversation.handle,
   );
@@ -39,6 +40,17 @@ class _CommunityEditScreenState extends ConsumerState<CommunityEditScreen> {
   late CommunityConversation _conversation = widget.conversation;
   var _savingMetadata = false;
   var _savingSettings = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final display = communityDescription(context, _conversation) ?? '';
+    if (_shownDescription == null ||
+        _descriptionController.text == _shownDescription) {
+      _descriptionController.text = display;
+    }
+    _shownDescription = display;
+  }
 
   bool _settingBool(String key, bool fallback) {
     final value = widget.conversation.settings[key];
@@ -69,27 +81,28 @@ class _CommunityEditScreenState extends ConsumerState<CommunityEditScreen> {
             conversationId: _conversation.id,
             title: _titleController.text,
             description: _descriptionController.text,
+            updateDescription: _descriptionController.text != _shownDescription,
             visibility: _visibility,
             handle: _handleController.text,
           );
       await ref.read(chatRepositoryProvider).refreshConversations();
       if (!mounted) return;
       setState(() => _conversation = updated);
-      showCommunityMessage(context, 'Community details saved.');
+      _shownDescription = communityDescription(context, updated) ?? '';
+      showCommunityMessage(context, context.l10n.communityDetailsSaved);
     } catch (error) {
-      if (mounted) showCommunityMessage(context, communityErrorText(error));
+      if (mounted) {
+        showCommunityMessage(context, communityErrorText(context, error));
+      }
     } finally {
       if (mounted) setState(() => _savingMetadata = false);
     }
   }
 
   Future<void> _saveSettings() async {
-    final slowMode = int.tryParse(_slowModeController.text.trim());
+    final slowMode = int.tryParse(asciiDigits(_slowModeController.text.trim()));
     if (slowMode == null || slowMode < 0 || slowMode > 86400) {
-      showCommunityMessage(
-        context,
-        'Slow mode must be from 0 to 86400 seconds.',
-      );
+      showCommunityMessage(context, context.l10n.communitySlowModeInvalid);
       return;
     }
     setState(() => _savingSettings = true);
@@ -105,9 +118,11 @@ class _CommunityEditScreenState extends ConsumerState<CommunityEditScreen> {
           );
       if (!mounted) return;
       setState(() => _conversation = updated);
-      showCommunityMessage(context, 'Community settings saved.');
+      showCommunityMessage(context, context.l10n.communitySettingsSaved);
     } catch (error) {
-      if (mounted) showCommunityMessage(context, communityErrorText(error));
+      if (mounted) {
+        showCommunityMessage(context, communityErrorText(context, error));
+      }
     } finally {
       if (mounted) setState(() => _savingSettings = false);
     }
@@ -116,161 +131,163 @@ class _CommunityEditScreenState extends ConsumerState<CommunityEditScreen> {
   void _close() => Navigator.pop(context, _conversation);
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      leading: IconButton(
-        tooltip: 'Back',
-        onPressed: _close,
-        icon: const Icon(Icons.arrow_back_rounded),
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          tooltip: l10n.back,
+          onPressed: _close,
+          icon: const BackButtonIcon(),
+        ),
+        title: Text(l10n.communityDetailsAndSettings),
       ),
-      title: const Text('Metadata and settings'),
-    ),
-    body: CommunityContent(
-      child: ListView(
-        padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 36),
-        children: [
-          Form(
-            key: _metadataKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Community details',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _titleController,
-                  maxLength: 180,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(labelText: 'Name'),
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? 'Enter a name.'
-                      : null,
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _descriptionController,
-                  maxLength: 1000,
-                  minLines: 3,
-                  maxLines: 5,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
-                    labelText: 'Description (optional)',
-                    alignLabelWithHint: true,
+      body: CommunityContent(
+        child: ListView(
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 36),
+          children: [
+            Form(
+              key: _metadataKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    l10n.communityDetails,
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<CommunityVisibility>(
-                  initialValue: _visibility,
-                  decoration: const InputDecoration(labelText: 'Visibility'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: CommunityVisibility.public,
-                      child: Text('Public'),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _titleController,
+                    maxLength: 180,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(labelText: l10n.name),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? l10n.enterName
+                        : null,
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _descriptionController,
+                    maxLength: 1000,
+                    minLines: 3,
+                    maxLines: 5,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(
+                      labelText: l10n.descriptionOptional,
+                      alignLabelWithHint: true,
                     ),
-                    DropdownMenuItem(
-                      value: CommunityVisibility.private,
-                      child: Text('Private'),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<CommunityVisibility>(
+                    initialValue: _visibility,
+                    decoration: InputDecoration(labelText: l10n.visibility),
+                    items: [
+                      DropdownMenuItem(
+                        value: CommunityVisibility.public,
+                        child: Text(l10n.publicVisibility),
+                      ),
+                      DropdownMenuItem(
+                        value: CommunityVisibility.private,
+                        child: Text(l10n.privateVisibility),
+                      ),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _visibility = value ?? _visibility),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _handleController,
+                    maxLength: 32,
+                    autocorrect: false,
+                    textCapitalization: TextCapitalization.none,
+                    decoration: InputDecoration(
+                      labelText: _visibility == CommunityVisibility.public
+                          ? l10n.username
+                          : l10n.handleOptional,
+                      prefixText: '@',
                     ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _visibility = value ?? _visibility),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _handleController,
-                  maxLength: 32,
-                  autocorrect: false,
-                  textCapitalization: TextCapitalization.none,
-                  decoration: InputDecoration(
-                    labelText: _visibility == CommunityVisibility.public
-                        ? 'Handle'
-                        : 'Handle (optional)',
-                    prefixText: '@',
+                    validator: (value) {
+                      if (_visibility == CommunityVisibility.public &&
+                          (value == null || value.trim().isEmpty)) {
+                        return l10n.communityHandleRequired;
+                      }
+                      return null;
+                    },
                   ),
-                  validator: (value) {
-                    if (_visibility == CommunityVisibility.public &&
-                        (value == null || value.trim().isEmpty)) {
-                      return 'Enter a handle.';
-                    }
-                    return null;
-                  },
-                ),
-                FilledButton.icon(
-                  onPressed: _savingMetadata ? null : _saveMetadata,
-                  icon: _savingMetadata
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.save_outlined),
-                  label: const Text('Save details'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 36),
-          Text(
-            'Conversation settings',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _slowModeController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Slow mode (seconds)',
-              helperText: 'Use 0 to turn slow mode off.',
-              prefixIcon: Icon(Icons.timer_outlined),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            elevation: 0,
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
-            child: Column(
-              children: [
-                SwitchListTile(
-                  value: _membersCanPost,
-                  onChanged: (value) => setState(() => _membersCanPost = value),
-                  title: const Text('Members can post'),
-                  subtitle: const Text(
-                    'Allow regular members to send messages.',
+                  FilledButton.icon(
+                    onPressed: _savingMetadata ? null : _saveMetadata,
+                    icon: _savingMetadata
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save_outlined),
+                    label: Text(l10n.communitySaveDetails),
                   ),
-                ),
-                const Divider(height: 1),
-                SwitchListTile(
-                  value: _membersCanInvite,
-                  onChanged: (value) =>
-                      setState(() => _membersCanInvite = value),
-                  title: const Text('Members can invite'),
-                  subtitle: const Text('Allow members to share invite links.'),
-                ),
-                const Divider(height: 1),
-                SwitchListTile(
-                  value: _commentsEnabled,
-                  onChanged: (value) =>
-                      setState(() => _commentsEnabled = value),
-                  title: const Text('Comments enabled'),
-                  subtitle: const Text('Allow discussion on channel posts.'),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          FilledButton.tonalIcon(
-            onPressed: _savingSettings ? null : _saveSettings,
-            icon: _savingSettings
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.tune_rounded),
-            label: const Text('Save settings'),
-          ),
-        ],
+            const SizedBox(height: 36),
+            Text(
+              l10n.communityConversationSettings,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _slowModeController,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: l10n.communitySlowMode,
+                helperText: l10n.communitySlowModeHelp,
+                prefixIcon: const Icon(Icons.timer_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              elevation: 0,
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    value: _membersCanPost,
+                    onChanged: (value) =>
+                        setState(() => _membersCanPost = value),
+                    title: Text(l10n.communityMembersCanPost),
+                    subtitle: Text(l10n.communityMembersCanPostHelp),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    value: _membersCanInvite,
+                    onChanged: (value) =>
+                        setState(() => _membersCanInvite = value),
+                    title: Text(l10n.communityMembersCanInvite),
+                    subtitle: Text(l10n.communityMembersCanInviteHelp),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    value: _commentsEnabled,
+                    onChanged: (value) =>
+                        setState(() => _commentsEnabled = value),
+                    title: Text(l10n.communityCommentsEnabled),
+                    subtitle: Text(l10n.communityCommentsEnabledHelp),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.tonalIcon(
+              onPressed: _savingSettings ? null : _saveSettings,
+              icon: _savingSettings
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.tune_rounded),
+              label: Text(l10n.saveSettings),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

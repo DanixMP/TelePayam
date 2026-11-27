@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/features/auth/domain/account.dart';
 import 'package:university_messenger/features/reports/data/reports_api.dart';
 import 'package:university_messenger/features/reports/domain/report_models.dart';
 import 'package:university_messenger/features/reports/presentation/report_ui.dart';
 import 'package:university_messenger/features/reports/report_strings.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class ModeratorReportScreen extends ConsumerStatefulWidget {
   const ModeratorReportScreen({required this.initialReport, super.key});
@@ -20,8 +22,8 @@ class ModeratorReportScreen extends ConsumerStatefulWidget {
 class _ModeratorReportScreenState extends ConsumerState<ModeratorReportScreen> {
   late ReportRecord _report = widget.initialReport;
   List<ReportEvidenceMessage>? _evidence;
-  String? _actionError;
-  String? _evidenceError;
+  Object? _actionError;
+  Object? _evidenceError;
   bool _claiming = false;
   bool _loadingEvidence = false;
   bool _resolving = false;
@@ -49,7 +51,7 @@ class _ModeratorReportScreenState extends ConsumerState<ModeratorReportScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _actionError = reportErrorText(error);
+        _actionError = error;
         _claiming = false;
       });
     }
@@ -73,7 +75,7 @@ class _ModeratorReportScreenState extends ConsumerState<ModeratorReportScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _evidenceError = reportErrorText(error);
+        _evidenceError = error;
         _loadingEvidence = false;
       });
     }
@@ -105,12 +107,12 @@ class _ModeratorReportScreenState extends ConsumerState<ModeratorReportScreen> {
         _resolving = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(ReportStrings.reportResolved)),
+        SnackBar(content: Text(context.l10n.reportReportResolved)),
       );
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _actionError = reportErrorText(error);
+        _actionError = error;
         _resolving = false;
       });
     }
@@ -118,15 +120,16 @@ class _ModeratorReportScreenState extends ConsumerState<ModeratorReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final account = ref.watch(authControllerProvider).state.account;
     if (account?.role != UserRole.moderator) {
       return Scaffold(
-        appBar: AppBar(title: const Text(ReportStrings.reportDetails)),
-        body: const SafeArea(
+        appBar: AppBar(title: Text(l10n.reportReportDetails)),
+        body: SafeArea(
           child: ReportEmptyState(
             icon: Icons.lock_outline_rounded,
-            title: ReportStrings.moderationAccessTitle,
-            body: ReportStrings.moderationAccessBody,
+            title: l10n.reportModerationAccessTitle,
+            body: l10n.reportModerationAccessBody,
           ),
         ),
       );
@@ -141,7 +144,7 @@ class _ModeratorReportScreenState extends ConsumerState<ModeratorReportScreen> {
       });
     }
     return Scaffold(
-      appBar: AppBar(title: const Text(ReportStrings.reportDetails)),
+      appBar: AppBar(title: Text(l10n.reportReportDetails)),
       body: SafeArea(
         child: Align(
           alignment: Alignment.topCenter,
@@ -155,16 +158,16 @@ class _ModeratorReportScreenState extends ConsumerState<ModeratorReportScreen> {
                   _ReportSummary(report: _report),
                   if (_actionError != null) ...[
                     const SizedBox(height: 16),
-                    ReportErrorPanel(message: _actionError!),
+                    ReportErrorPanel(
+                      message: reportErrorText(l10n, _actionError!),
+                    ),
                   ],
                   const SizedBox(height: 24),
                   if (_report.status == ReportStatus.open &&
                       _report.assignedTo == null)
                     _ClaimPanel(loading: _claiming, onClaim: _claim)
                   else if (!_isMine && _report.status == ReportStatus.assigned)
-                    const ReportErrorPanel(
-                      message: ReportStrings.assignedElsewhere,
-                    ),
+                    ReportErrorPanel(message: l10n.reportAssignedElsewhere),
                   if (_report.status == ReportStatus.resolved ||
                       _report.status == ReportStatus.dismissed) ...[
                     _ResolvedPanel(report: _report),
@@ -172,7 +175,7 @@ class _ModeratorReportScreenState extends ConsumerState<ModeratorReportScreen> {
                     const SizedBox(height: 24),
                     _EvidenceHeader(reportId: _report.id),
                     const SizedBox(height: 12),
-                    _buildEvidence(),
+                    _buildEvidence(context),
                     if (_isMine) ...[
                       const SizedBox(height: 24),
                       FilledButton.icon(
@@ -187,8 +190,8 @@ class _ModeratorReportScreenState extends ConsumerState<ModeratorReportScreen> {
                             : const Icon(Icons.task_alt_rounded),
                         label: Text(
                           _resolving
-                              ? ReportStrings.resolvingReport
-                              : ReportStrings.resolveReport,
+                              ? l10n.reportResolvingReport
+                              : l10n.reportResolveReport,
                         ),
                       ),
                     ],
@@ -202,19 +205,20 @@ class _ModeratorReportScreenState extends ConsumerState<ModeratorReportScreen> {
     );
   }
 
-  Widget _buildEvidence() {
+  Widget _buildEvidence(BuildContext context) {
+    final l10n = context.l10n;
     if (_report.conversationId == null) {
-      return const ReportEmptyState(
+      return ReportEmptyState(
         icon: Icons.comments_disabled_outlined,
-        title: ReportStrings.evidenceTitle,
-        body: ReportStrings.noConversationEvidence,
+        title: l10n.reportEvidenceTitle,
+        body: l10n.reportNoConversationEvidence,
       );
     }
     if (!_isMine) {
-      return const ReportEmptyState(
+      return ReportEmptyState(
         icon: Icons.lock_outline_rounded,
-        title: ReportStrings.evidenceTitle,
-        body: ReportStrings.evidenceAfterClaim,
+        title: l10n.reportEvidenceTitle,
+        body: l10n.reportEvidenceAfterClaim,
       );
     }
     if (_loadingEvidence && _evidence == null) {
@@ -222,27 +226,33 @@ class _ModeratorReportScreenState extends ConsumerState<ModeratorReportScreen> {
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Semantics(
-            label: ReportStrings.loadingEvidence,
+            label: l10n.reportLoadingEvidence,
             child: const CircularProgressIndicator(),
           ),
         ),
       );
     }
     if (_evidenceError != null && _evidence == null) {
-      return ReportErrorPanel(message: _evidenceError!, onRetry: _loadEvidence);
+      return ReportErrorPanel(
+        message: reportErrorText(l10n, _evidenceError!),
+        onRetry: _loadEvidence,
+      );
     }
     final evidence = _evidence ?? const <ReportEvidenceMessage>[];
     if (evidence.isEmpty) {
-      return const ReportEmptyState(
+      return ReportEmptyState(
         icon: Icons.chat_bubble_outline_rounded,
-        title: ReportStrings.evidenceTitle,
-        body: ReportStrings.noEvidenceMessages,
+        title: l10n.reportEvidenceTitle,
+        body: l10n.reportNoEvidenceMessages,
       );
     }
     return Column(
       children: [
         if (_evidenceError != null) ...[
-          ReportErrorPanel(message: _evidenceError!, onRetry: _loadEvidence),
+          ReportErrorPanel(
+            message: reportErrorText(l10n, _evidenceError!),
+            onRetry: _loadEvidence,
+          ),
           const SizedBox(height: 10),
         ],
         for (final message in evidence) ...[
@@ -265,6 +275,10 @@ class _ReportSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
+    final note = report.note?.isNotEmpty == true
+        ? report.note!
+        : l10n.reportNoNote;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -273,7 +287,7 @@ class _ReportSummary extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                report.reason,
+                reportReasonLabel(l10n, report.reason),
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -287,7 +301,7 @@ class _ReportSummary extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                reportStatusLabel(report.status),
+                reportStatusLabel(l10n, report.status),
                 style: TextStyle(
                   color: scheme.onSecondaryContainer,
                   fontWeight: FontWeight.w700,
@@ -298,58 +312,52 @@ class _ReportSummary extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         ReportDetailRow(
-          label: ReportStrings.reportId,
+          label: l10n.reportReportId,
           value: report.id,
           forceLtr: true,
         ),
         ReportDetailRow(
-          label: ReportStrings.reporterId,
+          label: l10n.reportReporterId,
           value: report.reporterId,
           forceLtr: true,
         ),
         ReportDetailRow(
-          label: ReportStrings.target,
-          value: reportTargetLabel(report.targetType),
+          label: l10n.reportTarget,
+          value: reportTargetLabel(l10n, report.targetType),
         ),
         ReportDetailRow(
-          label: ReportStrings.targetId,
+          label: l10n.reportTargetId,
           value: report.targetId,
           forceLtr: true,
         ),
         if (report.conversationId case final id?)
           ReportDetailRow(
-            label: ReportStrings.conversationId,
+            label: l10n.reportConversationId,
             value: id,
             forceLtr: true,
           ),
         if (report.messageId case final id?)
           ReportDetailRow(
-            label: ReportStrings.messageId,
+            label: l10n.reportMessageId,
             value: id,
             forceLtr: true,
           ),
         ReportDetailRow(
-          label: ReportStrings.submittedOn,
+          label: l10n.submitted,
           value: reportDateTime(context, report.createdAt),
         ),
         const SizedBox(height: 14),
         Text(
-          ReportStrings.reportNote,
+          l10n.reportReportNote,
           style: Theme.of(
             context,
           ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 6),
         Directionality(
-          textDirection: reportTextDirection(
-            report.note?.isNotEmpty == true
-                ? report.note!
-                : ReportStrings.noNote,
-          ),
+          textDirection: reportTextDirection(note),
           child: Text(
-            report.note?.isNotEmpty == true
-                ? report.note!
-                : ReportStrings.noNote,
+            note,
             style: TextStyle(color: scheme.onSurfaceVariant, height: 1.45),
           ),
         ),
@@ -367,6 +375,7 @@ class _ClaimPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -377,7 +386,7 @@ class _ClaimPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            ReportStrings.claimBody,
+            l10n.reportClaimBody,
             style: TextStyle(color: scheme.onSurfaceVariant, height: 1.45),
           ),
           const SizedBox(height: 14),
@@ -390,9 +399,7 @@ class _ClaimPanel extends StatelessWidget {
                   )
                 : const Icon(Icons.assignment_ind_outlined),
             label: Text(
-              loading
-                  ? ReportStrings.claimingReport
-                  : ReportStrings.claimReport,
+              loading ? l10n.reportClaimingReport : l10n.reportClaimReport,
             ),
           ),
         ],
@@ -425,7 +432,7 @@ class _EvidenceHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${ReportStrings.evidenceAccess} #${shortIdentifier(reportId)}',
+                  '${context.l10n.reportEvidenceAccess} \u2066#${shortIdentifier(reportId)}\u2069',
                   style: TextStyle(
                     color: scheme.onTertiaryContainer,
                     fontWeight: FontWeight.w700,
@@ -433,7 +440,7 @@ class _EvidenceHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  ReportStrings.evidenceAccessBody,
+                  context.l10n.reportEvidenceAccessBody,
                   style: TextStyle(
                     color: scheme.onTertiaryContainer,
                     height: 1.4,
@@ -457,9 +464,14 @@ class _EvidenceMessageTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
+    final sequence = NumberFormat.decimalPattern(
+      l10n.localeName,
+    ).format(message.sequence);
     final body = message.deletedAt == null
-        ? message.body ?? '${ReportStrings.messageType}: ${message.type}'
-        : ReportStrings.deletedMessage;
+        ? message.body ??
+              '${l10n.reportMessageType}: ${localizedMessageType(l10n, message.type)}'
+        : l10n.messageDeleted;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -476,20 +488,18 @@ class _EvidenceMessageTile extends StatelessWidget {
             children: [
               if (reported)
                 Text(
-                  ReportStrings.reportedMessage,
+                  l10n.reportReportedMessage,
                   style: TextStyle(
                     color: scheme.primary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               Text(
-                '${ReportStrings.sender}: ${shortIdentifier(message.senderId)}',
-                textDirection: TextDirection.ltr,
+                '${l10n.reportSender}: \u2066${shortIdentifier(message.senderId)}\u2069',
                 style: Theme.of(context).textTheme.labelMedium,
               ),
               Text(
-                '${ReportStrings.sequence}: ${message.sequence}',
-                textDirection: TextDirection.ltr,
+                '${l10n.reportSequence}: $sequence',
                 style: Theme.of(context).textTheme.labelMedium,
               ),
               Text(
@@ -517,6 +527,7 @@ class _ResolvedPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     final outcome = report.resolutionOutcome;
     return Container(
       padding: const EdgeInsets.all(16),
@@ -529,8 +540,8 @@ class _ResolvedPanel extends StatelessWidget {
         children: [
           Text(
             outcome == null
-                ? ReportStrings.reportResolved
-                : resolutionOutcomeLabel(outcome),
+                ? l10n.reportReportResolved
+                : resolutionOutcomeLabel(l10n, outcome),
             style: TextStyle(
               color: scheme.onSecondaryContainer,
               fontWeight: FontWeight.w700,
@@ -538,13 +549,13 @@ class _ResolvedPanel extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            ReportStrings.resolvedBody,
+            l10n.reportResolvedBody,
             style: TextStyle(color: scheme.onSecondaryContainer),
           ),
           if (report.resolutionNote case final note?) ...[
             const SizedBox(height: 8),
             Text(
-              '${ReportStrings.moderatorNote}: $note',
+              '${l10n.reportModeratorNote}: $note',
               style: TextStyle(color: scheme.onSecondaryContainer),
             ),
           ],
@@ -584,21 +595,21 @@ class _ResolveSheetState extends State<_ResolveSheet> {
   List<(ResolutionOutcome, String, String)> get _options => [
     (
       ResolutionOutcome.dismiss,
-      ReportStrings.dismissAction,
-      ReportStrings.dismissDescription,
+      context.l10n.reportDismissAction,
+      context.l10n.reportDismissDescription,
     ),
     if (widget.report.messageId != null)
       (
         ResolutionOutcome.removeContent,
-        ReportStrings.removeContentAction,
-        ReportStrings.removeContentDescription,
+        context.l10n.reportRemoveContentAction,
+        context.l10n.reportRemoveContentDescription,
       ),
     if (widget.report.targetType == ReportTargetType.user ||
         widget.report.targetType == ReportTargetType.message)
       (
         ResolutionOutcome.ban,
-        ReportStrings.banAction,
-        ReportStrings.banDescription,
+        context.l10n.reportBanAction,
+        context.l10n.reportBanDescription,
       ),
   ];
 
@@ -628,14 +639,14 @@ class _ResolveSheetState extends State<_ResolveSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              ReportStrings.resolveReport,
+              context.l10n.reportResolveReport,
               style: Theme.of(
                 context,
               ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text(
-              ReportStrings.resolutionFinal,
+              context.l10n.reportResolutionFinal,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -663,24 +674,24 @@ class _ResolveSheetState extends State<_ResolveSheet> {
               minLines: 2,
               maxLines: 5,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: ReportStrings.resolutionNote,
-                hintText: ReportStrings.resolutionNoteHint,
+              decoration: InputDecoration(
+                labelText: context.l10n.reportResolutionNote,
+                hintText: context.l10n.reportResolutionNoteHint,
                 alignLabelWithHint: true,
               ),
               validator: (value) => (value?.length ?? 0) > 500
-                  ? ReportStrings.resolutionNoteTooLong
+                  ? context.l10n.reportResolutionNoteTooLong
                   : null,
             ),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: _outcome == null ? null : _submit,
-              child: const Text(ReportStrings.resolveReport),
+              child: Text(context.l10n.reportResolveReport),
             ),
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text(ReportStrings.cancel),
+              child: Text(context.l10n.cancel),
             ),
           ],
         ),

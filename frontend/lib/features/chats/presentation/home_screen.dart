@@ -7,6 +7,7 @@ import 'package:university_messenger/features/auth/domain/account.dart';
 import 'package:university_messenger/features/calls/calls_feature.dart';
 import 'package:university_messenger/features/chats/presentation/chat_list_pane.dart';
 import 'package:university_messenger/features/chats/presentation/chat_screen.dart';
+import 'package:university_messenger/features/settings/settings_screen.dart';
 import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -32,7 +33,7 @@ class HomeScreen extends ConsumerWidget {
           ? FloatingActionButton(
               onPressed: () =>
                   context.push('/home/communities/create?kind=group'),
-              tooltip: 'Create group',
+              tooltip: context.l10n.createGroup,
               child: const Icon(Icons.add_comment_outlined),
             )
           : null,
@@ -83,6 +84,7 @@ class _HomeDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     void open(String location) {
       Navigator.pop(context);
       context.push(location);
@@ -109,7 +111,7 @@ class _HomeDrawer extends StatelessWidget {
         ),
         ListTile(
           leading: const Icon(Icons.account_circle_outlined),
-          title: Text(context.l10n.myProfile),
+          title: Text(l10n.myProfile),
           onTap: () => open('/home/profile'),
         ),
         if (role?.canChat == true)
@@ -120,7 +122,7 @@ class _HomeDrawer extends StatelessWidget {
           ),
         ListTile(
           leading: const Icon(Icons.explore_outlined),
-          title: const Text('Discover communities'),
+          title: Text(l10n.discoverCommunities),
           onTap: () => open('/home/communities'),
         ),
         if (role == UserRole.student || role == UserRole.professor)
@@ -128,20 +130,20 @@ class _HomeDrawer extends StatelessWidget {
             leading: const Icon(Icons.add_box_outlined),
             title: Text(
               role == UserRole.student
-                  ? 'Create group or channel'
-                  : 'Create channel',
+                  ? l10n.createGroupOrChannel
+                  : l10n.createChannel,
             ),
             onTap: () => open('/home/communities/create'),
           ),
         if (role == UserRole.student || role == UserRole.staff)
           ListTile(
             leading: const Icon(Icons.account_balance_outlined),
-            title: const Text('University services'),
+            title: Text(l10n.universityServices),
             onTap: () => open('/home/services'),
           ),
         ListTile(
           leading: const Icon(Icons.flag_outlined),
-          title: const Text('My reports'),
+          title: Text(l10n.reportMyReportsTitle),
           onTap: () => open('/home/reports'),
         ),
         if (role?.isAdmin == true)
@@ -153,13 +155,18 @@ class _HomeDrawer extends StatelessWidget {
         if (role == UserRole.moderator)
           ListTile(
             leading: const Icon(Icons.policy_outlined),
-            title: const Text('Moderation queue'),
+            title: Text(l10n.reportModerationQueue),
             onTap: () => open('/home/moderation'),
           ),
         ListTile(
           leading: const Icon(Icons.call_outlined),
-          title: const Text('Call history'),
+          title: Text(l10n.callHistory),
           onTap: () => open(CallRoutes.history),
+        ),
+        ListTile(
+          leading: const Icon(Icons.settings_outlined),
+          title: Text(l10n.settings),
+          onTap: () => open(SettingsScreen.path),
         ),
       ],
     );

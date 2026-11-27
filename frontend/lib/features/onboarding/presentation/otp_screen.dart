@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:university_messenger/app/providers.dart';
+import 'package:university_messenger/core/utils/validators.dart';
 import 'package:university_messenger/core/widgets/async_primary_button.dart';
 import 'package:university_messenger/core/widgets/auth_scaffold.dart';
 import 'package:university_messenger/core/widgets/auth_steps.dart';
@@ -51,7 +52,9 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       return;
     }
     FocusScope.of(context).unfocus();
-    await ref.read(authControllerProvider).verifyOtp(_codeController.text);
+    await ref
+        .read(authControllerProvider)
+        .verifyOtp(asciiDigits(_codeController.text));
   }
 
   Future<void> _resend() async {
@@ -76,9 +79,10 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     final l10n = context.l10n;
     final controller = ref.watch(authControllerProvider);
     final auth = controller.state;
+    final phone = auth.phone ?? '';
     return AuthScaffold(
       title: l10n.otpTitle,
-      description: l10n.otpBody(auth.phone ?? ''),
+      description: l10n.otpBody('\u2066$phone\u2069'),
       steps: authSteps(l10n),
       currentStep: 1,
       child: Column(
@@ -93,7 +97,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
               textInputAction: TextInputAction.done,
               autofillHints: const [AutofillHints.oneTimeCode],
               inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9۰-۹٠-٩]')),
                 LengthLimitingTextInputFormatter(6),
               ],
               textAlign: TextAlign.center,
