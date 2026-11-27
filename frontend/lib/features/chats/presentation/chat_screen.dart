@@ -8,6 +8,7 @@ import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/core/media/authenticated_media.dart';
 import 'package:university_messenger/core/media/media_thumbnail.dart';
 import 'package:university_messenger/features/calls/calls_feature.dart';
+import 'package:university_messenger/features/chats/chat_strings.dart';
 import 'package:university_messenger/features/chats/domain/chat_models.dart';
 import 'package:university_messenger/features/reports/reports.dart';
 import 'package:university_messenger/l10n/localization_extensions.dart';
@@ -111,42 +112,46 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (body.trim().isEmpty) return;
     final editing = _editing;
     final replyingTo = _replyingTo;
-    _messageController.clear();
     _typingTimer?.cancel();
     _typingSent = false;
     ref.read(chatRepositoryProvider).setTyping(widget.conversationId, false);
-    if (editing != null) {
-      await ref.read(chatRepositoryProvider).editMessage(editing.id, body);
-    } else {
-      await ref
-          .read(chatRepositoryProvider)
-          .sendMessage(
-            widget.conversationId,
-            body: body,
-            replyToId: replyingTo?.id,
-          );
-    }
-    if (mounted) {
+    final chat = widget.conversationId;
+    if (editing == null) _messageController.clear();
+    await _runChatAction(() async {
+      final repository = ref.read(chatRepositoryProvider);
+      if (editing != null) {
+        await repository.editMessage(editing.id, body);
+      } else {
+        await repository.sendMessage(
+          chat,
+          body: body,
+          replyToId: replyingTo?.id,
+        );
+      }
+      if (!mounted || chat != widget.conversationId) return;
+      if (editing != null && _messageController.text == body) {
+        _messageController.clear();
+      }
       setState(() {
-        _editing = null;
-        _replyingTo = null;
+        if (_editing == editing) _editing = null;
+        if (_replyingTo == replyingTo) _replyingTo = null;
       });
-    }
-    _scrollToBottom();
+      _scrollToBottom();
+    });
   }
 
   Future<void> _pickAttachment() async {
     final chat = widget.conversationId;
-    final files = await openFiles();
-    if (!mounted || files.isEmpty || chat != widget.conversationId) return;
-    if (files.length > 10) {
-      _notice('Choose up to 10 attachments per message.');
-      return;
-    }
-    final caption = _messageController.text.trim();
-    final reply = _replyingTo?.id;
     setState(() => _uploading = true);
     try {
+      final files = await openFiles();
+      if (!mounted || files.isEmpty || chat != widget.conversationId) return;
+      if (files.length > 10) {
+        _notice(context.l10n.chatAttachmentLimit);
+        return;
+      }
+      final caption = _messageController.text.trim();
+      final reply = _replyingTo?.id;
       final client = ref.read(mediaClientProvider);
       final ids = <String>[];
       String type = 'album';
@@ -180,11 +185,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     } catch (error) {
       if (mounted) {
-        _notice(
-          error is FormatException
-              ? error.message
-              : 'Upload failed. Check your connection and try again.',
-        );
+        final l10n = context.l10n;
+        _notice(localizedMediaError(l10n, error, l10n.chatUploadFailed));
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -194,68 +196,81 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void _notice(String text) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
+  Future<void> _runChatAction(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (error) {
+      if (mounted) {
+        _notice(localizedApiError(context.l10n, apiErrorCode(error)));
+      }
+    }
+  }
+
   Future<void> _createPoll() async {
-    final question = TextEditingController();
-    final first = TextEditingController();
-    final second = TextEditingController();
+    final chat = widget.conversationId;
+    final form = GlobalKey<FormState>();
+    final values = List.filled(3, '');
     final poll = await showDialog<ChatPoll>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create poll'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: question,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Question'),
+      builder: (context) {
+        final l10n = context.l10n;
+        return AlertDialog(
+          scrollable: true,
+          title: Text(l10n.chatCreatePoll),
+          content: Form(
+            key: form,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var index = 0; index < values.length; index++) ...[
+                  if (index > 0) const SizedBox(height: 12),
+                  TextFormField(
+                    autofocus: index == 0,
+                    decoration: InputDecoration(
+                      labelText: index == 0
+                          ? l10n.chatPollQuestion
+                          : l10n.chatPollOption(index),
+                    ),
+                    validator: (value) => (value?.trim().isEmpty ?? true)
+                        ? l10n.requiredField
+                        : null,
+                    onSaved: (value) => values[index] = value!.trim(),
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: first,
-              decoration: const InputDecoration(labelText: 'Option 1'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(l10n.cancel),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: second,
-              decoration: const InputDecoration(labelText: 'Option 2'),
+            FilledButton(
+              onPressed: () {
+                if (!form.currentState!.validate()) return;
+                form.currentState!.save();
+                Navigator.pop(
+                  context,
+                  ChatPoll(
+                    question: values.first,
+                    options: values.sublist(1),
+                    voteCounts: const [0, 0],
+                  ),
+                );
+              },
+              child: Text(l10n.create),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final options = [first.text.trim(), second.text.trim()];
-              if (question.text.trim().isEmpty ||
-                  options.any((e) => e.isEmpty)) {
-                return;
-              }
-              Navigator.pop(
-                context,
-                ChatPoll(
-                  question: question.text.trim(),
-                  options: options,
-                  voteCounts: const [0, 0],
-                ),
-              );
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
+        );
+      },
     );
-    question.dispose();
-    first.dispose();
-    second.dispose();
-    if (poll == null) return;
-    await ref
-        .read(chatRepositoryProvider)
-        .sendMessage(widget.conversationId, type: 'poll', poll: poll);
-    _scrollToBottom();
+    if (poll == null || !mounted || chat != widget.conversationId) return;
+    await _runChatAction(() async {
+      await ref
+          .read(chatRepositoryProvider)
+          .sendMessage(chat, type: 'poll', poll: poll);
+      if (mounted && chat == widget.conversationId) _scrollToBottom();
+    });
   }
 
   Future<void> _showStickerPanel() async {
@@ -284,43 +299,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 );
               }
               if (snapshot.hasError) {
-                return const SizedBox(
+                return SizedBox(
                   height: 280,
-                  child: Center(
-                    child: Text('Could not load stickers and GIFs.'),
-                  ),
+                  child: Center(child: Text(context.l10n.chatStickerLoadError)),
                 );
               }
+              final l10n = context.l10n;
               final data = snapshot.data!;
               final favorites = data[0] as List<ChatSticker>;
               final recents = data[1] as List<ChatSticker>;
               final packs = data[2] as List<ChatStickerPack>;
               final gifs = data[3] as List<String>;
-              final stickers = {
-                for (final s in [
-                  ...favorites,
-                  ...recents,
-                  ...packs.expand((p) => p.stickers),
-                ])
-                  s.id: s,
-              }.values.toList();
               return DefaultTabController(
                 length: 3,
                 child: SizedBox(
                   height: MediaQuery.sizeOf(context).height * 0.56,
                   child: Column(
                     children: [
-                      const TabBar(
+                      TabBar(
                         tabs: [
                           Tab(
-                            icon: Icon(Icons.emoji_emotions_outlined),
-                            text: 'Emoji',
+                            icon: const Icon(Icons.emoji_emotions_outlined),
+                            text: l10n.chatEmoji,
                           ),
                           Tab(
-                            icon: Icon(Icons.auto_awesome_outlined),
-                            text: 'Stickers',
+                            icon: const Icon(Icons.auto_awesome_outlined),
+                            text: l10n.chatStickers,
                           ),
-                          Tab(icon: Icon(Icons.gif_box_outlined), text: 'GIFs'),
+                          Tab(
+                            icon: const Icon(Icons.gif_box_outlined),
+                            text: l10n.chatGifs,
+                          ),
                         ],
                       ),
                       Expanded(
@@ -342,7 +351,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   icon: const Icon(
                                     Icons.add_photo_alternate_outlined,
                                   ),
-                                  label: const Text('Add a sticker'),
+                                  label: Text(l10n.chatAddSticker),
                                   onPressed: () => Navigator.pop(context, (
                                     type: 'new-sticker',
                                     mediaId: '',
@@ -351,7 +360,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 ),
                                 Expanded(
                                   child: _StickerGrid(
-                                    stickers: stickers,
+                                    favorites: favorites,
+                                    recents: recents,
+                                    packs: packs,
                                     onSelected: (sticker) =>
                                         Navigator.pop(context, (
                                           type: 'sticker',
@@ -366,7 +377,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               children: [
                                 TextButton.icon(
                                   icon: const Icon(Icons.add),
-                                  label: const Text('Add a GIF'),
+                                  label: Text(l10n.chatAddGif),
                                   onPressed: () => Navigator.pop(context, (
                                     type: 'new-gif',
                                     mediaId: '',
@@ -405,7 +416,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         final file = await openFile(
           acceptedTypeGroups: [
             XTypeGroup(
-              label: gif ? 'GIF' : 'Sticker',
+              label: gif ? context.l10n.gif : context.l10n.sticker,
               extensions: gif ? ['gif'] : ['png', 'webp', 'jpg', 'jpeg'],
               mimeTypes: gif
                   ? ['image/gif']
@@ -444,8 +455,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         setState(() => _replyingTo = null);
         _scrollToBottom();
       }
-    } catch (_) {
-      if (mounted) _notice('Could not send this sticker or GIF. Try again.');
+    } catch (error) {
+      if (mounted) {
+        final l10n = context.l10n;
+        _notice(localizedMediaError(l10n, error, l10n.chatSendStickerError));
+      }
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -453,43 +467,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> _forwardMessage(ChatMessage message) async {
     final repo = ref.read(chatRepositoryProvider);
-    final conversations = await repo.watchConversations().first;
-    if (!mounted) return;
-    final target = await showDialog<String>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('Forward to'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, 'saved'),
-            child: const ListTile(
-              leading: Icon(Icons.bookmark_outline),
-              title: Text('Saved messages'),
+    try {
+      final conversations = await repo.watchConversations().first;
+      if (!mounted) return;
+      final target = await showDialog<String>(
+        context: context,
+        builder: (context) => SimpleDialog(
+          title: Text(context.l10n.chatForwardTo),
+          children: [
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, 'saved'),
+              child: ListTile(
+                leading: const Icon(Icons.bookmark_outline),
+                title: Text(context.l10n.savedMessages),
+              ),
             ),
-          ),
-          ...conversations
-              .where(
-                (item) =>
-                    item.id != widget.conversationId &&
-                    (item.type != ConversationType.channel ||
-                        ['owner', 'admin'].contains(item.myRole)),
-              )
-              .map(
-                (item) => SimpleDialogOption(
+            for (final item in conversations)
+              if (!item.isSavedMessages &&
+                  item.id != message.conversationId &&
+                  (item.type != ConversationType.channel ||
+                      ['owner', 'admin'].contains(item.myRole)))
+                SimpleDialogOption(
                   onPressed: () => Navigator.pop(context, item.id),
                   child: ListTile(
                     leading: const CircleAvatar(
                       child: Icon(Icons.chat_bubble_outline_rounded),
                     ),
-                    title: Text(item.title),
+                    title: Text(chatTitle(context.l10n, item)),
                   ),
                 ),
-              ),
-        ],
-      ),
-    );
-    if (target == null || !mounted) return;
-    try {
+          ],
+        ),
+      );
+      if (target == null || !mounted) return;
       final id = target == 'saved'
           ? await repo.openDm(
               ref.read(authControllerProvider).state.account!.id,
@@ -506,32 +516,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Forward added to chat'),
+            content: Text(context.l10n.chatForwardAdded),
             action: SnackBarAction(
-              label: 'Open',
+              label: context.l10n.open,
               onPressed: () => context.go('/home/chat/$id'),
             ),
           ),
         );
       }
-    } catch (_) {
-      if (mounted) _notice('Could not forward this message. Try again.');
+    } catch (error) {
+      if (mounted) {
+        final l10n = context.l10n;
+        final code = apiErrorCode(error);
+        _notice(
+          code == null || code == 'request_failed'
+              ? l10n.chatForwardFailed
+              : localizedApiError(l10n, code),
+        );
+      }
     }
   }
 
-  Future<void> _showPinnedMessages() async {
-    final messages = await ref
-        .read(chatRepositoryProvider)
-        .listPinned(widget.conversationId);
-    if (!mounted) return;
+  Future<void> _showPinnedMessages() => _runChatAction(() async {
+    final chat = widget.conversationId;
+    final messages = await ref.read(chatRepositoryProvider).listPinned(chat);
+    if (!mounted || chat != widget.conversationId) return;
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
         child: messages.isEmpty
-            ? const SizedBox(
+            ? SizedBox(
                 height: 180,
-                child: Center(child: Text('No pinned messages')),
+                child: Center(child: Text(context.l10n.chatNoPinned)),
               )
             : ListView.builder(
                 shrinkWrap: true,
@@ -539,7 +556,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 itemBuilder: (_, index) => ListTile(
                   leading: const Icon(Icons.push_pin_outlined),
                   title: Text(
-                    messages[index].body ?? messages[index].type,
+                    chatMessagePreview(context.l10n, messages[index]),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -547,154 +564,178 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
       ),
     );
-  }
+  });
 
   Future<void> _showMessageActions(ChatMessage message, bool mine) async {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Wrap(
-          children: [
-            if (message.type == 'sticker' && message.attachmentIds.isNotEmpty)
-              ListTile(
-                leading: const Icon(Icons.star_outline),
-                title: const Text('Favorite sticker'),
-                onTap: () async {
-                  Navigator.pop(sheetContext);
-                  try {
-                    await ref
-                        .read(apiClientProvider)
-                        .dio
-                        .put<void>(
-                          '/stickers/media/${message.attachmentIds.first}/favorite',
-                        );
-                    if (mounted) _notice('Sticker added to favorites.');
-                  } catch (_) {
-                    if (mounted) _notice('Could not favorite this sticker.');
-                  }
-                },
-              ),
-            if (message.type == 'animation' && message.attachmentIds.isNotEmpty)
-              ListTile(
-                leading: const Icon(Icons.gif_box_outlined),
-                title: const Text('Save GIF'),
-                onTap: () async {
-                  Navigator.pop(sheetContext);
-                  try {
-                    await ref
-                        .read(apiClientProvider)
-                        .dio
-                        .put<void>('/gifs/${message.attachmentIds.first}');
-                    if (mounted) _notice('GIF saved to your library.');
-                  } catch (_) {
-                    if (mounted) _notice('Could not save this GIF.');
-                  }
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.reply_rounded),
-              title: const Text('Reply'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                setState(() => _replyingTo = message);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.add_reaction_outlined),
-              title: const Text('React'),
-              trailing: Wrap(
-                children: ['👍', '❤️', '👏']
-                    .map(
-                      (emoji) => IconButton(
-                        onPressed: () {
-                          Navigator.pop(sheetContext);
-                          ref
-                              .read(chatRepositoryProvider)
-                              .addReaction(message.id, emoji);
-                        },
-                        icon: Text(emoji),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.forward_rounded),
-              title: const Text('Forward'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _forwardMessage(message);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.push_pin_outlined),
-              title: const Text('Pin message'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                ref.read(chatRepositoryProvider).setPinned(message.id, true);
-              },
-            ),
-            if (mine && message.type == 'text')
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Edit'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  setState(() {
-                    _editing = message;
-                    _replyingTo = null;
-                    _messageController.text = message.body ?? '';
-                  });
-                },
-              ),
-            if (mine)
-              ListTile(
-                leading: Icon(
-                  Icons.delete_outline_rounded,
-                  color: Theme.of(context).colorScheme.error,
+      builder: (sheetContext) {
+        final l10n = sheetContext.l10n;
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (message.type == 'sticker' &&
+                    message.attachmentIds.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(Icons.star_outline),
+                    title: Text(l10n.chatFavoriteSticker),
+                    onTap: () async {
+                      Navigator.pop(sheetContext);
+                      try {
+                        await ref
+                            .read(apiClientProvider)
+                            .dio
+                            .put<void>(
+                              '/stickers/media/${message.attachmentIds.first}/favorite',
+                            );
+                        if (mounted) _notice(context.l10n.chatStickerFavorited);
+                      } catch (_) {
+                        if (mounted) _notice(context.l10n.chatFavoriteFailed);
+                      }
+                    },
+                  ),
+                if (message.type == 'animation' &&
+                    message.attachmentIds.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(Icons.gif_box_outlined),
+                    title: Text(l10n.chatSaveGif),
+                    onTap: () async {
+                      Navigator.pop(sheetContext);
+                      try {
+                        await ref
+                            .read(apiClientProvider)
+                            .dio
+                            .put<void>('/gifs/${message.attachmentIds.first}');
+                        if (mounted) _notice(context.l10n.chatGifSaved);
+                      } catch (_) {
+                        if (mounted) _notice(context.l10n.chatGifSaveFailed);
+                      }
+                    },
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.reply_rounded),
+                  title: Text(l10n.chatReply),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    setState(() => _replyingTo = message);
+                  },
                 ),
-                title: Text(
-                  'Delete',
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ListTile(
+                  leading: const Icon(Icons.add_reaction_outlined),
+                  title: Text(l10n.chatReact),
+                  trailing: Wrap(
+                    children: ['👍', '❤️', '👏']
+                        .map(
+                          (emoji) => IconButton(
+                            tooltip: l10n.chatReactWith(emoji),
+                            onPressed: () {
+                              Navigator.pop(sheetContext);
+                              _runChatAction(
+                                () => ref
+                                    .read(chatRepositoryProvider)
+                                    .addReaction(message.id, emoji),
+                              );
+                            },
+                            icon: Text(emoji),
+                          ),
+                        )
+                        .toList(),
+                  ),
                 ),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  ref.read(chatRepositoryProvider).deleteMessage(message.id);
-                },
-              ),
-            if (!mine)
-              ListTile(
-                leading: const Icon(Icons.flag_outlined),
-                title: const Text('Report'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => SubmitReportScreen(
-                        target: ReportTargetContext.message(
-                          messageId: message.id,
-                          conversationId: message.conversationId,
-                        ),
+                ListTile(
+                  leading: const Icon(Icons.forward_rounded),
+                  title: Text(l10n.chatForward),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _forwardMessage(message);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.push_pin_outlined),
+                  title: Text(l10n.chatPinMessage),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _runChatAction(
+                      () => ref
+                          .read(chatRepositoryProvider)
+                          .setPinned(message.id, true),
+                    );
+                  },
+                ),
+                if (mine && message.type == 'text')
+                  ListTile(
+                    leading: const Icon(Icons.edit_outlined),
+                    title: Text(l10n.edit),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      setState(() {
+                        _editing = message;
+                        _replyingTo = null;
+                        _messageController.text =
+                            chatMessageBody(l10n, message) ?? '';
+                      });
+                    },
+                  ),
+                if (mine)
+                  ListTile(
+                    leading: Icon(
+                      Icons.delete_outline_rounded,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    title: Text(
+                      l10n.delete,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
                       ),
                     ),
-                  );
-                },
-              ),
-          ],
-        ),
-      ),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      _runChatAction(
+                        () => ref
+                            .read(chatRepositoryProvider)
+                            .deleteMessage(message.id),
+                      );
+                    },
+                  ),
+                if (!mine)
+                  ListTile(
+                    leading: const Icon(Icons.flag_outlined),
+                    title: Text(l10n.reportSubmitTitle),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => SubmitReportScreen(
+                            target: ReportTargetContext.message(
+                              messageId: message.id,
+                              conversationId: message.conversationId,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
+      if (!mounted || !_scrollController.hasClients) return;
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        return;
+      }
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : const Duration(milliseconds: 260),
+        duration: const Duration(milliseconds: 260),
         curve: Curves.easeOutCubic,
       );
     });
@@ -711,6 +752,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final typing = ref
         .watch(typingUsersProvider(widget.conversationId))
         .valueOrNull;
+    final peerName =
+        conversation == null ||
+            conversation.isSavedMessages ||
+            conversation.title.isEmpty
+        ? null
+        : chatTitle(context.l10n, conversation);
 
     final content = Column(
       children: [
@@ -719,21 +766,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           showBack: !widget.embedded,
           onBack: () => context.canPop() ? context.pop() : context.go('/home'),
           typing: typing?.isNotEmpty == true,
-          onAudioCall: conversation?.type == ConversationType.dm
+          onAudioCall:
+              conversation?.type == ConversationType.dm &&
+                  conversation?.isSavedMessages == false
               ? () => context.push(
                   CallRoutes.outgoingLocation(
                     conversationId: widget.conversationId,
                     kind: CallKind.audio,
-                    peerName: conversation?.title,
+                    peerName: peerName,
                   ),
                 )
               : null,
-          onVideoCall: conversation?.type == ConversationType.dm
+          onVideoCall:
+              conversation?.type == ConversationType.dm &&
+                  conversation?.isSavedMessages == false
               ? () => context.push(
                   CallRoutes.outgoingLocation(
                     conversationId: widget.conversationId,
                     kind: CallKind.video,
-                    peerName: conversation?.title,
+                    peerName: peerName,
                   ),
                 )
               : null,
@@ -797,14 +848,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   messages: items,
                   controller: _scrollController,
                   accountId: ref.read(authControllerProvider).state.account?.id,
-                  onLoadEarlier: () => ref
-                      .read(chatRepositoryProvider)
-                      .loadOlderMessages(widget.conversationId),
+                  onLoadEarlier: () => _runChatAction(
+                    () => ref
+                        .read(chatRepositoryProvider)
+                        .loadOlderMessages(widget.conversationId),
+                  ),
                   onRetry: ref.read(chatRepositoryProvider).retryMessage,
                   onLongPress: _showMessageActions,
-                  onVote: (messageId, option) => ref
-                      .read(chatRepositoryProvider)
-                      .votePoll(messageId, [option]),
+                  onVote: (messageId, option) => _runChatAction(
+                    () => ref.read(chatRepositoryProvider).votePoll(messageId, [
+                      option,
+                    ]),
+                  ),
                 );
               },
             ),
@@ -857,12 +912,16 @@ class _ChatHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = conversation?.title ?? context.l10n.chats;
+    final l10n = context.l10n;
+    final chat = conversation;
+    final title = chat == null ? l10n.chats : chatTitle(l10n, chat);
     final subtitle = typing
-        ? context.l10n.typing
-        : conversation?.type == ConversationType.dm
-        ? context.l10n.directMessage
-        : context.l10n.membersCount(conversation?.memberCount ?? 0);
+        ? l10n.typing
+        : chat?.type == ConversationType.dm
+        ? l10n.directMessage
+        : chat == null
+        ? null
+        : l10n.membersCount(chat.memberCount);
     return Container(
       height: 72,
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -879,7 +938,8 @@ class _ChatHeader extends StatelessWidget {
           if (showBack)
             IconButton(
               onPressed: onBack,
-              icon: const Icon(Icons.arrow_back_rounded),
+              tooltip: l10n.back,
+              icon: const BackButtonIcon(),
             ),
           ContactAvatar(
             id: conversation?.avatarId,
@@ -909,38 +969,41 @@ class _ChatHeader extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                Text(
-                  subtitle,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: typing
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                if (subtitle != null)
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: typing
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
           if (onAudioCall != null)
             IconButton(
               onPressed: onAudioCall,
-              tooltip: 'Audio call',
+              tooltip: l10n.callAudioCall,
               icon: const Icon(Icons.call_outlined),
             ),
           if (onVideoCall != null)
             IconButton(
               onPressed: onVideoCall,
-              tooltip: 'Video call',
+              tooltip: l10n.callVideoCall,
               icon: const Icon(Icons.videocam_outlined),
             ),
           if (onInfo != null)
             IconButton(
               onPressed: onInfo,
-              tooltip: 'Conversation info',
+              tooltip: l10n.chatConversationInfo,
               icon: const Icon(Icons.info_outline_rounded),
             ),
           IconButton(
             onPressed: onPinned,
-            tooltip: 'Pinned messages',
+            tooltip: l10n.chatPinnedMessages,
             icon: const Icon(Icons.push_pin_outlined),
           ),
         ],
@@ -1060,6 +1123,9 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
+    final body = chatMessageBody(l10n, message);
+    final forwardedBy = message.forwardFrom?['name']?.toString();
     final failed = message.delivery == MessageDelivery.failed;
     final actions =
         message.deletedAt == null && message.delivery == MessageDelivery.sent
@@ -1081,7 +1147,7 @@ class _MessageBubble extends StatelessWidget {
       child: Semantics(
         container: true,
         button: failed || actions != null,
-        label: failed ? context.l10n.messageFailed : null,
+        label: failed ? l10n.messageFailed : null,
         child: GestureDetector(
           onTap: failed ? onRetry : actions,
           onLongPress: actions,
@@ -1105,9 +1171,9 @@ class _MessageBubble extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: Text(
-                      message.forwardFrom?['name'] == null
-                          ? 'Forwarded message'
-                          : 'Forwarded from ${message.forwardFrom!["name"]}',
+                      forwardedBy == null || forwardedBy.isEmpty
+                          ? l10n.chatForwardedMessage
+                          : l10n.chatForwardedFrom('\u2068$forwardedBy\u2069'),
                       style: Theme.of(
                         context,
                       ).textTheme.labelMedium?.copyWith(color: scheme.primary),
@@ -1115,7 +1181,7 @@ class _MessageBubble extends StatelessWidget {
                   ),
                 if (message.deletedAt != null)
                   Text(
-                    'Message deleted',
+                    l10n.messageDeleted,
                     style: TextStyle(
                       color: scheme.onSurfaceVariant,
                       fontStyle: FontStyle.italic,
@@ -1124,11 +1190,11 @@ class _MessageBubble extends StatelessWidget {
                 else if (message.poll != null)
                   _PollContent(poll: message.poll!, onVote: onVote)
                 else ...[
-                  if (message.body?.isNotEmpty == true)
+                  if (body != null && body.isNotEmpty)
                     Directionality(
-                      textDirection: _textDirection(message.body ?? ''),
+                      textDirection: _textDirection(body),
                       child: Text(
-                        message.body!,
+                        body,
                         style: TextStyle(
                           color: failed ? scheme.onErrorContainer : null,
                           height: 1.35,
@@ -1136,8 +1202,7 @@ class _MessageBubble extends StatelessWidget {
                       ),
                     ),
                   if (message.attachmentIds.isNotEmpty) ...[
-                    if (message.body?.isNotEmpty == true)
-                      const SizedBox(height: 8),
+                    if (body?.isNotEmpty == true) const SizedBox(height: 8),
                     ...message.attachmentIds.map(
                       (id) =>
                           _AttachmentContent(type: message.type, mediaId: id),
@@ -1160,7 +1225,9 @@ class _MessageBubble extends StatelessWidget {
                               color: scheme.secondaryContainer,
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Text('${entry.key} ${entry.value}'),
+                            child: Text(
+                              '${entry.key} ${MaterialLocalizations.of(context).formatDecimal(entry.value)}',
+                            ),
                           ),
                         )
                         .toList(),
@@ -1172,7 +1239,7 @@ class _MessageBubble extends StatelessWidget {
                   children: [
                     if (failed)
                       Text(
-                        context.l10n.messageFailed,
+                        l10n.messageFailed,
                         style: TextStyle(
                           color: scheme.onErrorContainer,
                           fontSize: 11,
@@ -1193,7 +1260,7 @@ class _MessageBubble extends StatelessWidget {
                       if (message.editedAt != null) ...[
                         const SizedBox(width: 4),
                         Text(
-                          '· ${context.l10n.edited}',
+                          '· ${l10n.edited}',
                           style: TextStyle(
                             color: scheme.onSurfaceVariant,
                             fontSize: 11,
@@ -1206,6 +1273,10 @@ class _MessageBubble extends StatelessWidget {
                           message.delivery == MessageDelivery.sending
                               ? Icons.schedule_rounded
                               : Icons.done_rounded,
+                          semanticLabel:
+                              message.delivery == MessageDelivery.sending
+                              ? l10n.messageSending
+                              : l10n.chatMessageSent,
                           size: 15,
                           color: scheme.primary,
                         ),
@@ -1231,9 +1302,9 @@ class _ReplyQuote extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => TextButton.icon(
     icon: const Icon(Icons.reply, size: 16),
     label: Text(
-      cached?.deletedAt != null
-          ? 'Message deleted'
-          : cached?.body ?? cached?.type ?? 'View original message',
+      cached == null
+          ? context.l10n.chatViewOriginal
+          : chatMessagePreview(context.l10n, cached!),
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
     ),
@@ -1254,16 +1325,10 @@ class _ReplyQuote extends ConsumerWidget {
               padding: const EdgeInsets.all(20),
               children: [
                 Text(
-                  'Original message',
+                  context.l10n.chatOriginalMessage,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                Text(
-                  original.deletedAt != null
-                      ? 'Message deleted'
-                      : original.body ??
-                            original.poll?.question ??
-                            original.type,
-                ),
+                Text(chatMessagePreview(context.l10n, original)),
                 if (original.deletedAt == null)
                   for (final media in original.attachmentIds)
                     AuthenticatedMediaTile(mediaId: media),
@@ -1274,7 +1339,7 @@ class _ReplyQuote extends ConsumerWidget {
       } catch (_) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Original message is unavailable.')),
+            SnackBar(content: Text(context.l10n.chatOriginalUnavailable)),
           );
         }
       }
@@ -1312,13 +1377,20 @@ class _PollContent extends StatelessWidget {
                   children: [
                     Expanded(child: Text(poll.options[index])),
                     Text(
-                      '${index < poll.voteCounts.length ? poll.voteCounts[index] : 0}',
+                      MaterialLocalizations.of(context).formatDecimal(
+                        index < poll.voteCounts.length
+                            ? poll.voteCounts[index]
+                            : 0,
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
-          Text('$total votes', style: Theme.of(context).textTheme.labelSmall),
+          Text(
+            context.l10n.chatPollVotes(total),
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
         ],
       ),
     );
@@ -1334,9 +1406,7 @@ class _AttachmentContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AuthenticatedMediaTile(
     mediaId: mediaId,
-    label: type == 'file'
-        ? 'Document'
-        : type[0].toUpperCase() + type.substring(1),
+    label: localizedMessageType(context.l10n, type),
     compact: type == 'sticker',
   );
 }
@@ -1381,46 +1451,79 @@ class _EmojiGrid extends StatelessWidget {
 }
 
 class _StickerGrid extends StatelessWidget {
-  const _StickerGrid({required this.stickers, required this.onSelected});
+  const _StickerGrid({
+    required this.favorites,
+    required this.recents,
+    required this.packs,
+    required this.onSelected,
+  });
 
-  final List<ChatSticker> stickers;
+  final List<ChatSticker> favorites;
+  final List<ChatSticker> recents;
+  final List<ChatStickerPack> packs;
   final ValueChanged<ChatSticker> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    if (stickers.isEmpty) {
-      return const Center(child: Text('No installed stickers'));
-    }
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-      ),
-      itemCount: stickers.length,
-      itemBuilder: (_, index) {
-        final sticker = stickers[index];
-        return InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () => onSelected(sticker),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: MediaThumbnail(
-                sticker.mediaId,
-                fit: BoxFit.contain,
-                label: sticker.emoji ?? 'Sticker',
-              ),
+    final l10n = context.l10n;
+    final seen = <String>{};
+    final sections = <Widget>[];
+    for (final (title, items) in [
+      (l10n.chatStickerFavorites, favorites),
+      (l10n.chatStickerRecents, recents),
+      for (final pack in packs) (stickerPackTitle(l10n, pack), pack.stickers),
+    ]) {
+      final stickers = items.where((sticker) => seen.add(sticker.id)).toList();
+      if (stickers.isEmpty) continue;
+      sections.add(
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          sliver: SliverToBoxAdapter(
+            child: Semantics(
+              header: true,
+              child: Text(title, style: Theme.of(context).textTheme.titleSmall),
             ),
           ),
-        );
-      },
-    );
+        ),
+      );
+      sections.add(
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          sliver: SliverGrid.builder(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 4,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+            ),
+            itemCount: stickers.length,
+            itemBuilder: (context, index) {
+              final sticker = stickers[index];
+              return InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => onSelected(sticker),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: MediaThumbnail(
+                      sticker.mediaId,
+                      fit: BoxFit.contain,
+                      label: sticker.emoji ?? l10n.sticker,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    }
+    return sections.isEmpty
+        ? Center(child: Text(l10n.chatNoStickers))
+        : CustomScrollView(slivers: sections);
   }
 }
 
@@ -1433,7 +1536,7 @@ class _GifGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (mediaIds.isEmpty) {
-      return const Center(child: Text('No saved GIFs'));
+      return Center(child: Text(context.l10n.chatNoGifs));
     }
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -1454,7 +1557,7 @@ class _GifGrid extends StatelessWidget {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
-            child: MediaThumbnail(mediaIds[index], label: 'GIF'),
+            child: MediaThumbnail(mediaIds[index], label: context.l10n.gif),
           ),
         ),
       ),
@@ -1489,6 +1592,7 @@ class _Composer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Material(
       color: Theme.of(context).colorScheme.surface,
       child: SafeArea(
@@ -1510,15 +1614,15 @@ class _Composer extends StatelessWidget {
                     Expanded(
                       child: Text(
                         editing
-                            ? 'Editing message'
-                            : contextMessage!.body ?? 'Attachment',
+                            ? l10n.chatEditingMessage
+                            : chatMessagePreview(l10n, contextMessage!),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     IconButton(
                       onPressed: onCancelContext,
-                      tooltip: 'Cancel',
+                      tooltip: l10n.cancel,
                       icon: const Icon(Icons.close_rounded),
                     ),
                   ],
@@ -1526,39 +1630,39 @@ class _Composer extends StatelessWidget {
               ),
             if (busy) const LinearProgressIndicator(minHeight: 2),
             Padding(
-              padding: const EdgeInsets.fromLTRB(4, 6, 8, 10),
+              padding: const EdgeInsetsDirectional.fromSTEB(4, 6, 8, 10),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   PopupMenuButton<String>(
                     enabled: !busy && !editing,
-                    tooltip: 'Attach',
+                    tooltip: l10n.attach,
                     icon: const Icon(Icons.add_circle_outline_rounded),
                     onSelected: (value) {
                       if (value == 'file') onAttach();
                       if (value == 'poll') onPoll();
                       if (value == 'stickers') onStickers();
                     },
-                    itemBuilder: (_) => const [
+                    itemBuilder: (_) => [
                       PopupMenuItem(
                         value: 'file',
                         child: ListTile(
-                          leading: Icon(Icons.attach_file_rounded),
-                          title: Text('Photo, video or file'),
+                          leading: const Icon(Icons.attach_file_rounded),
+                          title: Text(l10n.chatMediaPicker),
                         ),
                       ),
                       PopupMenuItem(
                         value: 'poll',
                         child: ListTile(
-                          leading: Icon(Icons.poll_outlined),
-                          title: Text('Poll'),
+                          leading: const Icon(Icons.poll_outlined),
+                          title: Text(l10n.poll),
                         ),
                       ),
                       PopupMenuItem(
                         value: 'stickers',
                         child: ListTile(
-                          leading: Icon(Icons.emoji_emotions_outlined),
-                          title: Text('Emoji, stickers and GIFs'),
+                          leading: const Icon(Icons.emoji_emotions_outlined),
+                          title: Text(l10n.chatStickerPicker),
                         ),
                       ),
                     ],

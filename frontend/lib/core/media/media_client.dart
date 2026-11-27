@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:university_messenger/core/media/media_save.dart';
 import 'package:university_messenger/core/network/api_client.dart';
+import 'package:university_messenger/core/network/api_exception.dart';
 
 class MediaResource {
   const MediaResource({
@@ -52,7 +53,10 @@ class MediaClient {
   }) async {
     final length = await file.length();
     if (length <= 0 || length > 25 * 1024 * 1024) {
-      throw const FormatException('Choose a non-empty file of 25 MB or less.');
+      throw const ApiException(
+        'file_too_large',
+        'File must be non-empty and 25 MB or less',
+      );
     }
     final mime = switch (file.name.split('.').last.toLowerCase()) {
       'jpg' || 'jpeg' => 'image/jpeg',
@@ -97,11 +101,15 @@ class MediaClient {
     return Uint8List.fromList(response.data!);
   }
 
-  Future<String?> save(String mediaId, {MediaResource? resource}) async {
+  Future<String?> save(
+    String mediaId, {
+    MediaResource? resource,
+    String? fallbackName,
+  }) async {
     final metadata = resource ?? await this.metadata(mediaId);
     return saveMediaBytes(
       await download(mediaId),
-      metadata.originalName ?? '${metadata.kind}-$mediaId',
+      metadata.originalName ?? fallbackName ?? '${metadata.kind}-$mediaId',
     );
   }
 }

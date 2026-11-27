@@ -3,23 +3,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:university_messenger/features/calls/domain/call_models.dart';
 import 'package:university_messenger/features/calls/presentation/call_controller.dart';
 import 'package:university_messenger/features/calls/presentation/call_providers.dart';
-import 'package:university_messenger/features/calls/presentation/call_strings.dart';
 import 'package:university_messenger/features/calls/presentation/call_widgets.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class IncomingCallScreen extends ConsumerWidget {
   const IncomingCallScreen({
     this.callId,
-    this.peerName = CallStrings.unknownCaller,
+    this.peerName,
     this.onClosed,
     super.key,
   });
 
   final String? callId;
-  final String peerName;
+  final String? peerName;
   final VoidCallback? onClosed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final controller = ref.watch(callControllerProvider);
     final state = controller.state;
     final call = _resolveCall(state.history, state.incomingCall);
@@ -55,10 +56,10 @@ class IncomingCallScreen extends ConsumerWidget {
                     child: CallIdentity(
                       name: peerName,
                       status: noLongerRinging
-                          ? CallStrings.incomingCallEnded
+                          ? l10n.callIncomingCallEnded
                           : video
-                          ? CallStrings.incomingVideoCall
-                          : CallStrings.incomingAudioCall,
+                          ? l10n.callIncomingVideoCall
+                          : l10n.callIncomingAudioCall,
                       video: video,
                       large: true,
                     ),
@@ -76,7 +77,7 @@ class IncomingCallScreen extends ConsumerWidget {
                     children: [
                       _IncomingAction(
                         icon: Icons.call_end_rounded,
-                        label: CallStrings.decline,
+                        label: l10n.callDecline,
                         color: Theme.of(context).colorScheme.error,
                         foreground: Theme.of(context).colorScheme.onError,
                         enabled: !state.isBusy,
@@ -86,7 +87,7 @@ class IncomingCallScreen extends ConsumerWidget {
                         icon: video
                             ? Icons.videocam_rounded
                             : Icons.call_rounded,
-                        label: CallStrings.answer,
+                        label: l10n.callAnswer,
                         color: Theme.of(context).colorScheme.primary,
                         foreground: Theme.of(context).colorScheme.onPrimary,
                         enabled: !state.isBusy,
@@ -101,7 +102,7 @@ class IncomingCallScreen extends ConsumerWidget {
                 padding: const EdgeInsets.all(24),
                 child: FilledButton(
                   onPressed: () => _close(context, controller),
-                  child: const Text(CallStrings.close),
+                  child: Text(l10n.close),
                 ),
               ),
           ],

@@ -6,6 +6,8 @@ import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/features/communities/data/community_api.dart';
 import 'package:university_messenger/features/communities/domain/community_models.dart';
 import 'package:university_messenger/features/communities/presentation/community_widgets.dart';
+import 'package:university_messenger/l10n/generated/app_localizations.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class CommunityMembersScreen extends ConsumerStatefulWidget {
   const CommunityMembersScreen({required this.conversation, super.key});
@@ -70,20 +72,19 @@ class _CommunityMembersScreenState
   }
 
   Future<void> _perform(CommunityMember member, _MemberAction action) async {
-    final label = switch (action) {
-      _MemberAction.promote => 'Promote',
-      _MemberAction.demote => 'Remove admin role',
-      _MemberAction.ban => 'Ban',
-      _MemberAction.remove => 'Remove',
-    };
     if (action == _MemberAction.ban || action == _MemberAction.remove) {
+      final l10n = context.l10n;
+      final banning = action == _MemberAction.ban;
+      final name = member.user.displayName;
       final confirmed = await confirmCommunityAction(
         context,
-        title: '$label ${member.user.displayName}?',
-        body: action == _MemberAction.ban
-            ? 'They will be removed and will not be able to rejoin.'
-            : 'They will be removed from this community.',
-        confirmLabel: label,
+        title: banning
+            ? l10n.communityBanMemberTitle(name)
+            : l10n.communityRemoveMemberTitle(name),
+        body: banning
+            ? l10n.communityBanMemberBody
+            : l10n.communityRemoveMemberBody,
+        confirmLabel: banning ? l10n.ban : l10n.remove,
         destructive: true,
       );
       if (!confirmed || !mounted) return;
@@ -114,10 +115,18 @@ class _CommunityMembersScreenState
       }
       await ref.read(chatRepositoryProvider).refreshConversations();
       if (!mounted) return;
-      showCommunityMessage(context, '$label completed.');
+      final l10n = context.l10n;
+      showCommunityMessage(context, switch (action) {
+        _MemberAction.promote => l10n.communityMemberPromoted,
+        _MemberAction.demote => l10n.communityMemberDemoted,
+        _MemberAction.ban => l10n.communityMemberBanned,
+        _MemberAction.remove => l10n.communityMemberRemoved,
+      });
       await _load();
     } catch (error) {
-      if (mounted) showCommunityMessage(context, communityErrorText(error));
+      if (mounted) {
+        showCommunityMessage(context, communityErrorText(context, error));
+      }
     } finally {
       if (mounted) setState(() => _mutating.remove(member.user.id));
     }
@@ -128,30 +137,31 @@ class _CommunityMembersScreenState
     final handle = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add member'),
+        title: Text(context.l10n.communityAddMember),
         content: TextField(
           controller: controller,
           autofocus: true,
           autocorrect: false,
-          decoration: const InputDecoration(
-            labelText: 'User handle',
+          textDirection: TextDirection.ltr,
+          decoration: InputDecoration(
+            labelText: context.l10n.username,
             prefixText: '@',
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Add'),
+            child: Text(context.l10n.add),
           ),
         ],
       ),
     );
     controller.dispose();
-    if (handle == null || handle.isEmpty) return;
+    if (!mounted || handle == null || handle.isEmpty) return;
     setState(() => _loading = true);
     try {
       final api = ref.read(communityApiProvider);
@@ -162,9 +172,16 @@ class _CommunityMembersScreenState
         role: CommunityMemberRole.member,
       );
       await _load();
-      if (mounted) showCommunityMessage(context, '${user.displayName} added.');
+      if (mounted) {
+        showCommunityMessage(
+          context,
+          context.l10n.communityMemberAdded(user.displayName),
+        );
+      }
     } catch (error) {
-      if (mounted) showCommunityMessage(context, communityErrorText(error));
+      if (mounted) {
+        showCommunityMessage(context, communityErrorText(context, error));
+      }
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -172,16 +189,16 @@ class _CommunityMembersScreenState
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Members'),
+      title: Text(context.l10n.members),
       actions: [
         if (widget.conversation.canManage)
           IconButton(
-            tooltip: 'Add member',
+            tooltip: context.l10n.communityAddMember,
             onPressed: _loading ? null : _addMember,
             icon: const Icon(Icons.person_add_alt_1_rounded),
           ),
         IconButton(
-          tooltip: 'Refresh',
+          tooltip: context.l10n.refresh,
           onPressed: _loading ? null : _load,
           icon: const Icon(Icons.refresh_rounded),
         ),
@@ -191,24 +208,25 @@ class _CommunityMembersScreenState
   );
 
   Widget _buildBody() {
+    final l10n = context.l10n;
     if (_loading && _members == null) {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null && _members == null) {
       return CommunityStateMessage(
         icon: Icons.cloud_off_rounded,
-        title: 'Could not load members',
-        body: communityErrorText(_error!),
-        actionLabel: 'Try again',
+        title: l10n.communityLoadMembersError,
+        body: communityErrorText(context, _error),
+        actionLabel: l10n.tryAgain,
         onAction: _load,
       );
     }
     final members = _members ?? const <CommunityMember>[];
     if (members.isEmpty) {
-      return const CommunityStateMessage(
+      return CommunityStateMessage(
         icon: Icons.group_off_outlined,
-        title: 'No members',
-        body: 'No active members were found.',
+        title: l10n.communityNoMembers,
+        body: l10n.communityNoMembersBody,
       );
     }
     return RefreshIndicator(
@@ -234,7 +252,7 @@ class _CommunityMembersScreenState
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            subtitle: Text(_roleLabel(member.role)),
+            subtitle: Text(_roleLabel(l10n, member.role)),
             trailing: mutating
                 ? const SizedBox.square(
                     dimension: 22,
@@ -243,7 +261,7 @@ class _CommunityMembersScreenState
                 : actions.isEmpty
                 ? null
                 : PopupMenuButton<_MemberAction>(
-                    tooltip: 'Manage member',
+                    tooltip: l10n.communityManageMember,
                     onSelected: (action) => _perform(member, action),
                     itemBuilder: (context) => actions
                         .map(
@@ -252,7 +270,7 @@ class _CommunityMembersScreenState
                             child: ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: Icon(_actionIcon(action)),
-                              title: Text(_actionLabel(action)),
+                              title: Text(_actionLabel(context.l10n, action)),
                             ),
                           ),
                         )
@@ -265,20 +283,22 @@ class _CommunityMembersScreenState
   }
 }
 
-String _roleLabel(CommunityMemberRole role) => switch (role) {
-  CommunityMemberRole.owner => 'Owner',
-  CommunityMemberRole.admin => 'Administrator',
-  CommunityMemberRole.member => 'Member',
-  CommunityMemberRole.subscriber => 'Subscriber',
-  CommunityMemberRole.banned => 'Banned',
-};
+String _roleLabel(AppLocalizations l10n, CommunityMemberRole role) =>
+    switch (role) {
+      CommunityMemberRole.owner => l10n.communityOwnerRole,
+      CommunityMemberRole.admin => l10n.communityAdminRole,
+      CommunityMemberRole.member => l10n.communityMemberRole,
+      CommunityMemberRole.subscriber => l10n.communitySubscriberRole,
+      CommunityMemberRole.banned => l10n.communityBannedRole,
+    };
 
-String _actionLabel(_MemberAction action) => switch (action) {
-  _MemberAction.promote => 'Promote to administrator',
-  _MemberAction.demote => 'Remove administrator role',
-  _MemberAction.ban => 'Ban member',
-  _MemberAction.remove => 'Remove member',
-};
+String _actionLabel(AppLocalizations l10n, _MemberAction action) =>
+    switch (action) {
+      _MemberAction.promote => l10n.communityPromoteMember,
+      _MemberAction.demote => l10n.communityDemoteMember,
+      _MemberAction.ban => l10n.communityBanMember,
+      _MemberAction.remove => l10n.communityRemoveMember,
+    };
 
 IconData _actionIcon(_MemberAction action) => switch (action) {
   _MemberAction.promote => Icons.admin_panel_settings_outlined,

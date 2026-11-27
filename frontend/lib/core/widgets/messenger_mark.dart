@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class MessengerMark extends StatelessWidget {
   const MessengerMark({super.key, this.size = 72, this.onPrimary = true});
@@ -11,7 +12,7 @@ class MessengerMark extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Semantics(
       image: true,
-      label: 'University Messenger',
+      label: context.l10n.appTitle,
       child: Container(
         width: size,
         height: size,

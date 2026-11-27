@@ -1,15 +1,26 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/core/media/media_client.dart';
+import 'package:university_messenger/core/utils/validators.dart';
 import 'package:university_messenger/features/services/domain/service_models.dart';
-import 'package:university_messenger/features/services/presentation/service_strings.dart';
 import 'package:university_messenger/features/services/presentation/service_widgets.dart';
 import 'package:university_messenger/features/services/services_providers.dart';
 import 'package:university_messenger/features/services/services_routes.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
+
+enum _RequestStep { details, documents, review }
+
+num? _parseNumber(ServiceFieldDefinition field, String value) {
+  final normalized = asciiDigits(
+    value,
+  ).replaceAll('−', '-').replaceAll('٫', '.');
+  if (field.type == 'integer') return int.tryParse(normalized, radix: 10);
+  final number = num.tryParse(normalized);
+  return number != null && number.isFinite ? number : null;
+}
 
 class ServiceRequestWizardScreen extends ConsumerStatefulWidget {
   const ServiceRequestWizardScreen({required this.serviceTypeId, super.key});
@@ -61,18 +72,18 @@ class _ServiceRequestWizardScreenState
     }
   }
 
-  List<String> _steps(ServiceType service) => [
-    ServiceStrings.details,
-    if (service.requiredDocuments.isNotEmpty) ServiceStrings.documents,
-    ServiceStrings.review,
+  List<_RequestStep> _steps(ServiceType service) => [
+    _RequestStep.details,
+    if (service.requiredDocuments.isNotEmpty) _RequestStep.documents,
+    _RequestStep.review,
   ];
 
   bool _validateCurrent(ServiceType service) {
     final steps = _steps(service);
-    if (steps[_step] == ServiceStrings.details) {
+    if (steps[_step] == _RequestStep.details) {
       return _detailsKey.currentState?.validate() ?? true;
     }
-    if (steps[_step] == ServiceStrings.documents) {
+    if (steps[_step] == _RequestStep.documents) {
       return _documentsKey.currentState?.validate() ?? true;
     }
     return true;
@@ -90,7 +101,7 @@ class _ServiceRequestWizardScreenState
           : field.isSelect
           ? _selections[field.key] ?? ''
           : field.isNumeric
-          ? num.tryParse(_fieldControllers[field.key]!.text.trim()) ??
+          ? _parseNumber(field, _fieldControllers[field.key]!.text.trim()) ??
                 _fieldControllers[field.key]!.text.trim()
           : _fieldControllers[field.key]!.text.trim(),
   };
@@ -101,17 +112,17 @@ class _ServiceRequestWizardScreenState
   };
 
   Future<void> _pickDocument(String kind) async {
-    final file = await openFile();
-    if (file == null) return;
     setState(() => _uploadingDocuments.add(kind));
     try {
+      final file = await openFile();
+      if (file == null || !mounted) return;
       final media = await ref.read(mediaClientProvider).upload(file);
       if (mounted) setState(() => _documents[kind] = media);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(serviceErrorMessage(error))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(serviceErrorMessage(context.l10n, error))),
+        );
       }
     } finally {
       if (mounted) setState(() => _uploadingDocuments.remove(kind));
@@ -131,14 +142,14 @@ class _ServiceRequestWizardScreenState
       ref.invalidate(serviceRequestsProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(ServiceStrings.requestSubmitted)),
+        SnackBar(content: Text(context.l10n.serviceRequestSubmitted)),
       );
       context.pushReplacement(ServiceRoutes.requestDetail(request.id));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(serviceErrorMessage(error))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(serviceErrorMessage(context.l10n, error))),
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -146,15 +157,16 @@ class _ServiceRequestWizardScreenState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final catalog = ref.watch(serviceCatalogProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text(ServiceStrings.newRequest)),
+      appBar: AppBar(title: Text(l10n.serviceNewRequest)),
       body: SafeArea(
         top: false,
         child: catalog.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => ServiceErrorState(
-            title: ServiceStrings.loadServicesError,
+            title: l10n.serviceLoadServicesError,
             error: error,
             onRetry: () => ref.invalidate(serviceCatalogProvider),
           ),
@@ -163,10 +175,10 @@ class _ServiceRequestWizardScreenState
                 .where((item) => item.id == widget.serviceTypeId)
                 .firstOrNull;
             if (service == null) {
-              return const ServiceEmptyState(
+              return ServiceEmptyState(
                 icon: Icons.search_off_rounded,
-                title: ServiceStrings.unknownService,
-                body: ServiceStrings.loadServicesError,
+                title: l10n.serviceUnknownService,
+                body: l10n.serviceTypeMissing,
               );
             }
             _initialize(service);
@@ -224,7 +236,7 @@ class _WizardBody extends StatelessWidget {
   });
 
   final ServiceType service;
-  final List<String> steps;
+  final List<_RequestStep> steps;
   final int step;
   final bool submitting;
   final Map<String, TextEditingController> fieldControllers;
@@ -245,10 +257,20 @@ class _WizardBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final current = steps[step];
+    final stepLabel = switch (current) {
+      _RequestStep.details => l10n.details,
+      _RequestStep.documents => l10n.documents,
+      _RequestStep.review => l10n.review,
+    };
     return Column(
       children: [
-        LinearProgressIndicator(value: (step + 1) / steps.length, minHeight: 3),
+        LinearProgressIndicator(
+          value: (step + 1) / steps.length,
+          minHeight: 3,
+          semanticsLabel: stepLabel,
+        ),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsetsDirectional.fromSTEB(24, 24, 24, 120),
@@ -264,13 +286,13 @@ class _WizardBody extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      current,
+                      stepLabel,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                     const SizedBox(height: 24),
-                    if (current == ServiceStrings.details)
+                    if (current == _RequestStep.details)
                       _DynamicDetailsForm(
                         formKey: detailsKey,
                         fields: service.requiredFields,
@@ -280,7 +302,7 @@ class _WizardBody extends StatelessWidget {
                         onBooleanChanged: onBooleanChanged,
                         onSelectionChanged: onSelectionChanged,
                       )
-                    else if (current == ServiceStrings.documents)
+                    else if (current == _RequestStep.documents)
                       _DocumentForm(
                         formKey: documentsKey,
                         documents: service.requiredDocuments,
@@ -315,7 +337,7 @@ class _WizardBody extends StatelessWidget {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: submitting ? null : onBack,
-                            child: const Text(ServiceStrings.back),
+                            child: Text(l10n.back),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -337,8 +359,8 @@ class _WizardBody extends StatelessWidget {
                                 )
                               : Text(
                                   step == steps.length - 1
-                                      ? ServiceStrings.submitRequest
-                                      : ServiceStrings.continueLabel,
+                                      ? l10n.serviceSubmitRequest
+                                      : l10n.continueLabel,
                                 ),
                         ),
                       ),
@@ -373,11 +395,19 @@ class _DynamicDetailsForm extends StatelessWidget {
   final void Function(String key, bool value) onBooleanChanged;
   final void Function(String key, String? value) onSelectionChanged;
 
-  String? _validateText(ServiceFieldDefinition field, String? value) {
+  String? _validateText(
+    BuildContext context,
+    ServiceFieldDefinition field,
+    String? value,
+  ) {
     final text = value?.trim() ?? '';
-    if (field.required && text.isEmpty) return ServiceStrings.requiredField;
-    if (text.isNotEmpty && field.isNumeric && num.tryParse(text) == null) {
-      return ServiceStrings.invalidNumber;
+    if (field.required && text.isEmpty) return context.l10n.requiredField;
+    if (text.isNotEmpty &&
+        field.isNumeric &&
+        _parseNumber(field, text) == null) {
+      return field.type == 'integer'
+          ? context.l10n.invalidWholeNumber
+          : context.l10n.invalidNumber;
     }
     return null;
   }
@@ -386,7 +416,7 @@ class _DynamicDetailsForm extends StatelessWidget {
   Widget build(BuildContext context) {
     if (fields.isEmpty) {
       return Text(
-        ServiceStrings.noRequestData,
+        context.l10n.serviceNoRequestData,
         style: Theme.of(context).textTheme.bodyLarge,
       );
     }
@@ -396,7 +426,7 @@ class _DynamicDetailsForm extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            ServiceStrings.fieldHelp,
+            context.l10n.serviceFieldHelp,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -408,7 +438,8 @@ class _DynamicDetailsForm extends StatelessWidget {
               controller: controllers[fields[index].key],
               booleanValue: booleans[fields[index].key] ?? false,
               selection: selections[fields[index].key],
-              validator: (value) => _validateText(fields[index], value),
+              validator: (value) =>
+                  _validateText(context, fields[index], value),
               onBooleanChanged: (value) =>
                   onBooleanChanged(fields[index].key, value),
               onSelectionChanged: (value) =>
@@ -443,10 +474,11 @@ class _DynamicField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final label = field.label ?? serviceFieldLabel(context.l10n, field.key);
     if (field.isBoolean) {
       return SwitchListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-        title: Text(field.label),
+        title: Text(label),
         subtitle: field.description == null ? null : Text(field.description!),
         value: booleanValue,
         onChanged: onBooleanChanged,
@@ -456,7 +488,7 @@ class _DynamicField extends StatelessWidget {
       return DropdownButtonFormField<String>(
         initialValue: selection,
         decoration: InputDecoration(
-          labelText: field.label,
+          labelText: label,
           helperText: field.description,
         ),
         items: field.options
@@ -483,14 +515,18 @@ class _DynamicField extends StatelessWidget {
           : field.isMultiline
           ? TextInputType.multiline
           : TextInputType.text,
-      inputFormatters: field.type == 'integer'
-          ? [FilteringTextInputFormatter.allow(RegExp(r'-?\d*'))]
+      textDirection:
+          field.isNumeric ||
+              date ||
+              field.type == 'phone' ||
+              field.type == 'email'
+          ? TextDirection.ltr
           : null,
       textInputAction: field.isMultiline
           ? TextInputAction.newline
           : TextInputAction.next,
       decoration: InputDecoration(
-        labelText: field.label,
+        labelText: label,
         hintText: field.placeholder,
         helperText: field.description,
         suffixIcon: date ? const Icon(Icons.calendar_today_outlined) : null,
@@ -537,7 +573,7 @@ class _DocumentForm extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          ServiceStrings.documentHelp,
+          context.l10n.serviceDocumentHelp,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
@@ -548,7 +584,7 @@ class _DocumentForm extends StatelessWidget {
             initialValue: selected[documents[index]],
             validator: (_) => selected.containsKey(documents[index])
                 ? null
-                : ServiceStrings.requiredField,
+                : context.l10n.requiredField,
             builder: (field) => ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 4),
               leading: CircleAvatar(
@@ -562,7 +598,9 @@ class _DocumentForm extends StatelessWidget {
               title: Text(documents[index]),
               subtitle: Text(
                 selected[documents[index]]?.originalName ??
-                    (field.hasError ? field.errorText! : 'Choose a file'),
+                    (field.hasError
+                        ? field.errorText!
+                        : context.l10n.chooseFile),
                 style: field.hasError
                     ? TextStyle(color: Theme.of(context).colorScheme.error)
                     : null,
@@ -572,7 +610,9 @@ class _DocumentForm extends StatelessWidget {
                     ? null
                     : () => onPick(documents[index]),
                 child: Text(
-                  selected.containsKey(documents[index]) ? 'Replace' : 'Upload',
+                  selected.containsKey(documents[index])
+                      ? context.l10n.replace
+                      : context.l10n.upload,
                 ),
               ),
             ),
@@ -598,13 +638,13 @@ class _ReviewStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final labels = {
-      for (final field in service.requiredFields) field.key: field.label,
+      for (final field in service.requiredFields) field.key: ?field.label,
     };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          ServiceStrings.reviewHelp,
+          context.l10n.serviceReviewHelp,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
@@ -612,13 +652,13 @@ class _ReviewStep extends StatelessWidget {
         const SizedBox(height: 22),
         if (data.isNotEmpty)
           ServiceSection(
-            title: ServiceStrings.requestData,
+            title: context.l10n.serviceRequestData,
             child: _ReviewValues(values: data, labels: labels, maskIds: false),
           ),
         if (data.isNotEmpty && documents.isNotEmpty) const SizedBox(height: 28),
         if (documents.isNotEmpty)
           ServiceSection(
-            title: ServiceStrings.requiredDocuments,
+            title: context.l10n.serviceRequiredDocuments,
             child: _ReviewValues(
               values: documents,
               labels: const {},
@@ -652,13 +692,18 @@ class _ReviewValues extends StatelessWidget {
         final entry = indexed.$2;
         final value = entry.value is bool
             ? entry.value as bool
-                  ? ServiceStrings.yes
-                  : ServiceStrings.no
+                  ? context.l10n.yes
+                  : context.l10n.no
             : entry.value.toString();
         return Column(
           children: [
             ListTile(
-              title: Text(labels[entry.key] ?? entry.key),
+              title: Text(
+                labels[entry.key] ??
+                    (maskIds
+                        ? entry.key
+                        : serviceFieldLabel(context.l10n, entry.key)),
+              ),
               subtitle: Text(
                 maskIds && value.length > 8
                     ? '${value.substring(0, 8)}...'

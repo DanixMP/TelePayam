@@ -6,7 +6,7 @@ import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/features/reports/data/reports_api.dart';
 import 'package:university_messenger/features/reports/domain/report_models.dart';
 import 'package:university_messenger/features/reports/presentation/report_ui.dart';
-import 'package:university_messenger/features/reports/report_strings.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class ReviewStateBanner extends ConsumerStatefulWidget {
   const ReviewStateBanner({
@@ -24,7 +24,7 @@ class ReviewStateBanner extends ConsumerStatefulWidget {
 
 class _ReviewStateBannerState extends ConsumerState<ReviewStateBanner> {
   ConversationReviewState? _state;
-  String? _error;
+  bool _loadFailed = false;
   bool _loading = true;
   int _requestVersion = 0;
   StreamSubscription? _events;
@@ -63,7 +63,7 @@ class _ReviewStateBannerState extends ConsumerState<ReviewStateBanner> {
     final requestVersion = ++_requestVersion;
     setState(() {
       _loading = true;
-      _error = null;
+      _loadFailed = false;
     });
     try {
       final state = await ReportsApi(
@@ -75,10 +75,10 @@ class _ReviewStateBannerState extends ConsumerState<ReviewStateBanner> {
         _loading = false;
       });
       widget.onStateChanged?.call(state);
-    } catch (error) {
+    } catch (_) {
       if (!mounted || requestVersion != _requestVersion) return;
       setState(() {
-        _error = reportErrorText(error);
+        _loadFailed = true;
         _loading = false;
       });
     }
@@ -88,10 +88,11 @@ class _ReviewStateBannerState extends ConsumerState<ReviewStateBanner> {
   Widget build(BuildContext context) {
     // Review status is supplemental chat context. Network failure must not
     // displace the message list or imply that a conversation is under review.
-    if (_loading || _error != null || _state?.underReview != true) {
+    if (_loading || _loadFailed || _state?.underReview != true) {
       return const SizedBox.shrink();
     }
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     return Semantics(
       liveRegion: true,
       child: Material(
@@ -108,7 +109,7 @@ class _ReviewStateBannerState extends ConsumerState<ReviewStateBanner> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      ReportStrings.underReview,
+                      l10n.reportUnderReview,
                       style: TextStyle(
                         color: scheme.onTertiaryContainer,
                         fontWeight: FontWeight.w700,
@@ -117,7 +118,7 @@ class _ReviewStateBannerState extends ConsumerState<ReviewStateBanner> {
                     ...[
                       const SizedBox(height: 3),
                       Text(
-                        ReportStrings.underReviewBody,
+                        l10n.reportUnderReviewBody,
                         style: TextStyle(
                           color: scheme.onTertiaryContainer,
                           height: 1.4,
@@ -126,7 +127,7 @@ class _ReviewStateBannerState extends ConsumerState<ReviewStateBanner> {
                       if (_state?.startedAt case final startedAt?) ...[
                         const SizedBox(height: 3),
                         Text(
-                          '${ReportStrings.reviewStarted}: ${reportDateTime(context, startedAt)}',
+                          '${l10n.reportReviewStarted}: ${reportDateTime(context, startedAt)}',
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: scheme.onTertiaryContainer),
                         ),

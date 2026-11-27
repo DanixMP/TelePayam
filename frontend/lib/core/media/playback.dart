@@ -3,14 +3,16 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:university_messenger/core/media/playback_native.dart'
     if (dart.library.js_interop) 'package:university_messenger/core/media/playback_web.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 import 'package:video_player/video_player.dart';
 
 Future<void> playMedia(
   BuildContext context,
   Uint8List bytes,
-  String mime,
-  String title,
-) async {
+  String mime, {
+  required String kind,
+  String? filename,
+}) async {
   final source = await preparePlayback(bytes, mime);
   final player = source.player;
   try {
@@ -20,7 +22,8 @@ Future<void> playMedia(
       MaterialPageRoute(
         builder: (_) => _Player(
           player: player,
-          title: title,
+          kind: kind,
+          filename: filename,
           video: mime.startsWith('video/'),
         ),
       ),
@@ -34,11 +37,13 @@ Future<void> playMedia(
 class _Player extends StatefulWidget {
   const _Player({
     required this.player,
-    required this.title,
+    required this.kind,
+    this.filename,
     required this.video,
   });
   final VideoPlayerController player;
-  final String title;
+  final String kind;
+  final String? filename;
   final bool video;
   @override
   State<_Player> createState() => _PlayerState();
@@ -48,15 +53,23 @@ class _PlayerState extends State<_Player> {
   late final ready = widget.player.initialize();
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.title)),
+    appBar: AppBar(
+      title: Text(
+        widget.filename ?? localizedMessageType(context.l10n, widget.kind),
+      ),
+    ),
     body: SafeArea(
       child: Center(
         child: FutureBuilder(
           future: ready,
           builder: (context, snapshot) {
             if (snapshot.hasError) {
-              return const Text(
-                'This device cannot play this format. You can still download it.',
+              return Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  context.l10n.mediaFormatUnavailable,
+                  textAlign: TextAlign.center,
+                ),
               );
             }
             if (snapshot.connectionState != ConnectionState.done) {
@@ -81,8 +94,10 @@ class _PlayerState extends State<_Player> {
                 ),
                 ValueListenableBuilder(
                   valueListenable: player,
-                  builder: (_, value, _) => IconButton.filled(
-                    tooltip: value.isPlaying ? 'Pause' : 'Play',
+                  builder: (context, value, _) => IconButton.filled(
+                    tooltip: value.isPlaying
+                        ? context.l10n.mediaPause
+                        : context.l10n.mediaPlay,
                     icon: Icon(
                       value.isPlaying ? Icons.pause : Icons.play_arrow,
                     ),

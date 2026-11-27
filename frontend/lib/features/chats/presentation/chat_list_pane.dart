@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/core/media/media_thumbnail.dart';
+import 'package:university_messenger/features/chats/chat_strings.dart';
 import 'package:university_messenger/features/chats/domain/chat_models.dart';
 import 'package:university_messenger/l10n/localization_extensions.dart';
 
@@ -40,7 +41,10 @@ class _ChatListPaneState extends ConsumerState<ChatListPane> {
 
   @override
   Widget build(BuildContext context) {
-    final conversations = ref.watch(conversationsProvider);
+    final searching = ref.watch(chatSearchProvider).trim().isNotEmpty;
+    final conversations = ref.watch(
+      searching ? chatSearchResultsProvider : conversationsProvider,
+    );
     final initialization = ref.watch(chatInitializationProvider);
     final account = ref.watch(authControllerProvider).state.account;
     return Material(
@@ -60,6 +64,7 @@ class _ChatListPaneState extends ConsumerState<ChatListPane> {
                         prefixIcon: const Icon(Icons.search_rounded),
                         suffixIcon: IconButton(
                           onPressed: _closeSearch,
+                          tooltip: context.l10n.close,
                           icon: const Icon(Icons.close_rounded),
                         ),
                         border: InputBorder.none,
@@ -72,15 +77,19 @@ class _ChatListPaneState extends ConsumerState<ChatListPane> {
                       children: [
                         IconButton(
                           onPressed: widget.onMenu,
-                          tooltip: 'Open navigation',
-                          icon: ContactAvatar(
-                            id: account?.avatarId,
-                            fallback: CircleAvatar(
-                              backgroundColor: Theme.of(
-                                context,
-                              ).colorScheme.primaryContainer,
-                              child: Text(
-                                _initials(account?.displayName ?? 'U'),
+                          tooltip: context.l10n.chatNavigation,
+                          icon: ExcludeSemantics(
+                            child: ContactAvatar(
+                              id: account?.avatarId,
+                              fallback: CircleAvatar(
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.primaryContainer,
+                                child:
+                                    account == null ||
+                                        account.displayName.isEmpty
+                                    ? const Icon(Icons.person_outline_rounded)
+                                    : Text(_initials(account.displayName)),
                               ),
                             ),
                           ),
@@ -150,10 +159,6 @@ class _ChatListPaneState extends ConsumerState<ChatListPane> {
               ),
               data: (items) {
                 if (items.isEmpty) {
-                  final searching = ref
-                      .watch(chatSearchProvider)
-                      .trim()
-                      .isNotEmpty;
                   return _ListNotice(
                     icon: searching
                         ? Icons.search_off_rounded
@@ -203,6 +208,7 @@ class _ConversationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final scheme = Theme.of(context).colorScheme;
     return ListTile(
       selected: selected,
@@ -226,7 +232,7 @@ class _ConversationTile extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              conversation.title,
+              chatTitle(l10n, conversation),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.w700),
@@ -239,7 +245,8 @@ class _ConversationTile extends StatelessWidget {
         ],
       ),
       subtitle: Text(
-        conversation.lastMessageBody ?? _typeLabel(context, conversation.type),
+        chatPreview(l10n, conversation) ??
+            chatTypeLabel(l10n, conversation.type),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -271,7 +278,9 @@ class _ConversationTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(11),
                 ),
                 child: Text(
-                  '${conversation.unreadCount}',
+                  MaterialLocalizations.of(
+                    context,
+                  ).formatDecimal(conversation.unreadCount),
                   style: TextStyle(
                     color: scheme.onPrimary,
                     fontSize: 12,
@@ -340,13 +349,6 @@ Color _avatarColor(String id, ColorScheme scheme) {
   ];
   return palette[id.hashCode.abs() % palette.length];
 }
-
-String _typeLabel(BuildContext context, ConversationType type) =>
-    switch (type) {
-      ConversationType.channel => context.l10n.channel,
-      ConversationType.group => context.l10n.group,
-      ConversationType.dm => context.l10n.directMessage,
-    };
 
 String _relativeTime(BuildContext context, DateTime date) {
   final now = DateTime.now();

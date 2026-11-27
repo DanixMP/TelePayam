@@ -56,7 +56,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                 textInputAction: TextInputAction.done,
                 autofillHints: const [AutofillHints.telephoneNumber],
                 inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9۰-۹٠-٩]')),
                   LengthLimitingTextInputFormatter(11),
                 ],
                 decoration: InputDecoration(

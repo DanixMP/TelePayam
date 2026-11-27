@@ -9,6 +9,7 @@ import 'package:university_messenger/features/communities/domain/community_model
 import 'package:university_messenger/features/communities/presentation/community_create_screen.dart';
 import 'package:university_messenger/features/communities/presentation/community_info_screen.dart';
 import 'package:university_messenger/features/communities/presentation/community_widgets.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class CommunityDiscoverScreen extends ConsumerStatefulWidget {
   const CommunityDiscoverScreen({this.onOpenConversation, super.key});
@@ -80,9 +81,14 @@ class _CommunityDiscoverScreenState
             ?.map((item) => item.id == joined.id ? joined : item)
             .toList();
       });
-      showCommunityMessage(context, 'Joined ${joined.title}.');
+      showCommunityMessage(
+        context,
+        context.l10n.communityJoined(communityTitle(context, joined)),
+      );
     } catch (error) {
-      if (mounted) showCommunityMessage(context, communityErrorText(error));
+      if (mounted) {
+        showCommunityMessage(context, communityErrorText(context, error));
+      }
     } finally {
       if (mounted) setState(() => _joining.remove(conversation.id));
     }
@@ -93,15 +99,16 @@ class _CommunityDiscoverScreenState
     final token = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Join with invite'),
+        title: Text(context.l10n.communityJoinWithInvite),
         content: TextField(
           controller: controller,
           autofocus: true,
           autocorrect: false,
           textCapitalization: TextCapitalization.none,
-          decoration: const InputDecoration(
-            labelText: 'Invite token',
-            hintText: 'Paste an invite token',
+          textDirection: TextDirection.ltr,
+          decoration: InputDecoration(
+            labelText: context.l10n.communityInviteToken,
+            hintText: context.l10n.communityPasteInvite,
           ),
           onSubmitted: (value) {
             if (value.trim().isNotEmpty) Navigator.pop(context, value.trim());
@@ -110,14 +117,14 @@ class _CommunityDiscoverScreenState
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () {
               final value = controller.text.trim();
               if (value.isNotEmpty) Navigator.pop(context, value);
             },
-            child: const Text('Join'),
+            child: Text(context.l10n.communityJoin),
           ),
         ],
       ),
@@ -131,10 +138,15 @@ class _CommunityDiscoverScreenState
           .joinInvite(token);
       await ref.read(chatRepositoryProvider).refreshConversations();
       if (!mounted) return;
-      showCommunityMessage(context, 'Joined ${conversation.title}.');
+      showCommunityMessage(
+        context,
+        context.l10n.communityJoined(communityTitle(context, conversation)),
+      );
       _openInfo(conversation);
     } catch (error) {
-      if (mounted) showCommunityMessage(context, communityErrorText(error));
+      if (mounted) {
+        showCommunityMessage(context, communityErrorText(context, error));
+      }
     } finally {
       if (mounted) setState(() => _joiningInvite = false);
     }
@@ -166,16 +178,17 @@ class _CommunityDiscoverScreenState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final account = ref.watch(authControllerProvider).state.account;
     final role = account?.role;
     final roleAllowed = role == UserRole.student || role == UserRole.professor;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Discover communities'),
+        title: Text(l10n.discoverCommunities),
         actions: [
           if (roleAllowed)
             IconButton(
-              tooltip: 'Join with invite',
+              tooltip: l10n.communityJoinWithInvite,
               onPressed: _joiningInvite ? null : _joinWithInvite,
               icon: _joiningInvite
                   ? const SizedBox.square(
@@ -186,25 +199,25 @@ class _CommunityDiscoverScreenState
             ),
           if (roleAllowed)
             PopupMenuButton<CommunityCreationKind>(
-              tooltip: 'Create community',
+              tooltip: l10n.communityCreate,
               icon: const Icon(Icons.add_rounded),
               onSelected: _openCreate,
               itemBuilder: (context) => [
                 if (role == UserRole.student)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: CommunityCreationKind.group,
                     child: ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.groups_rounded),
-                      title: Text('Student group'),
+                      leading: const Icon(Icons.groups_rounded),
+                      title: Text(l10n.communityStudentGroup),
                     ),
                   ),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: CommunityCreationKind.channel,
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.campaign_rounded),
-                    title: Text('Channel'),
+                    leading: const Icon(Icons.campaign_rounded),
+                    title: Text(l10n.channel),
                   ),
                 ),
               ],
@@ -212,11 +225,10 @@ class _CommunityDiscoverScreenState
         ],
       ),
       body: !roleAllowed
-          ? const CommunityStateMessage(
+          ? CommunityStateMessage(
               icon: Icons.lock_outline_rounded,
-              title: 'Communities are unavailable',
-              body:
-                  'Only active student and professor accounts can use communities.',
+              title: l10n.communityUnavailable,
+              body: l10n.communityUnavailableBody,
             )
           : CommunityContent(
               child: Column(
@@ -230,12 +242,12 @@ class _CommunityDiscoverScreenState
                     ),
                     child: SearchBar(
                       controller: _searchController,
-                      hintText: 'Search names and handles',
+                      hintText: l10n.communitySearch,
                       leading: const Icon(Icons.search_rounded),
                       trailing: [
                         if (_searchController.text.isNotEmpty)
                           IconButton(
-                            tooltip: 'Clear search',
+                            tooltip: l10n.clearSearch,
                             onPressed: () {
                               _searchController.clear();
                               _load();
@@ -255,16 +267,16 @@ class _CommunityDiscoverScreenState
                     child: SizedBox(
                       width: double.infinity,
                       child: SegmentedButton<bool>(
-                        segments: const [
+                        segments: [
                           ButtonSegment(
                             value: false,
-                            icon: Icon(Icons.public_rounded),
-                            label: Text('All public'),
+                            icon: const Icon(Icons.public_rounded),
+                            label: Text(l10n.communityAllPublic),
                           ),
                           ButtonSegment(
                             value: true,
-                            icon: Icon(Icons.school_rounded),
-                            label: Text('Professor channels'),
+                            icon: const Icon(Icons.school_rounded),
+                            label: Text(l10n.communityProfessorChannels),
                           ),
                         ],
                         selected: {_professorChannelsOnly},
@@ -286,12 +298,13 @@ class _CommunityDiscoverScreenState
   }
 
   Widget _buildResults() {
+    final l10n = context.l10n;
     if (_error != null && _items == null) {
       return CommunityStateMessage(
         icon: Icons.cloud_off_rounded,
-        title: 'Could not load communities',
-        body: communityErrorText(_error!),
-        actionLabel: 'Try again',
+        title: l10n.communityLoadError,
+        body: communityErrorText(context, _error),
+        actionLabel: l10n.tryAgain,
         onAction: _load,
       );
     }
@@ -299,10 +312,10 @@ class _CommunityDiscoverScreenState
     if (!_loading && items.isEmpty) {
       return CommunityStateMessage(
         icon: Icons.travel_explore_rounded,
-        title: 'No communities found',
+        title: l10n.communityNotFoundList,
         body: _searchController.text.trim().isEmpty
-            ? 'There are no public communities in this category yet.'
-            : 'Try a different name or handle.',
+            ? l10n.communityNoPublic
+            : l10n.communityNoMatches,
       );
     }
     return RefreshIndicator(
@@ -326,7 +339,7 @@ class _CommunityDiscoverScreenState
                 children: [
                   Expanded(
                     child: Text(
-                      conversation.title,
+                      communityTitle(context, conversation),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -339,14 +352,15 @@ class _CommunityDiscoverScreenState
               ),
               subtitle: Text(
                 [
-                  if (conversation.handle != null) '@${conversation.handle}',
-                  '${conversation.memberCount} members',
+                  if (conversation.handle != null)
+                    '\u2066@${conversation.handle}\u2069',
+                  l10n.membersCount(conversation.memberCount),
                 ].join(' · '),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               trailing: conversation.isMember
-                  ? const Icon(Icons.chevron_right_rounded)
+                  ? const Icon(Icons.navigate_next_rounded)
                   : FilledButton.tonal(
                       onPressed: joining ? null : () => _join(conversation),
                       child: joining
@@ -354,7 +368,7 @@ class _CommunityDiscoverScreenState
                               dimension: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Join'),
+                          : Text(l10n.communityJoin),
                     ),
               onTap: () => _openInfo(conversation),
             ),

@@ -18,7 +18,7 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body, h1, h2, p { margin: 0; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { min-height: 48px; padding: .55rem 1.15rem; border: 1px solid transparent; border-radius: 14px; font-weight: 650; cursor: pointer; }
 button:disabled { opacity: .65; cursor: wait; }
 :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
@@ -30,11 +30,14 @@ button:disabled { opacity: .65; cursor: wait; }
 .brand { gap: .65rem; font-weight: 650; }
 .brand svg { flex: none; }
 .area-name { border-inline-start: 1px solid #85a2bc; padding-inline-start: 1rem; color: #d6e7f5; }
-.bar-action { margin-inline-start: auto; color: #fff; background: transparent; }
+.bar-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-inline-start: auto; }
+.bar-controls select { min-height: 48px; padding-inline: .55rem; border: 1px solid #85a2bc; border-radius: 14px; color: #fff; background: var(--navy); }
+.bar-action { color: #fff; background: transparent; }
 .bar-action:hover { background: #285076; }
-.bar-action:focus-visible { outline-color: #fff; }
+.bar-controls :focus-visible { outline-color: #fff; }
 main { padding-block: clamp(2rem, 6vw, 4.5rem); }
 h1 { font-size: clamp(1.8rem, 4vw, 2.65rem); letter-spacing: -.03em; line-height: 1.15; }
+:lang(fa) h1 { letter-spacing: normal; line-height: 1.35; }
 h2 { font-size: 1.15rem; line-height: 1.35; }
 .auth-layout { display: grid; grid-template-columns: 2fr 3fr; max-width: 55rem; margin-inline: auto; border-radius: 16px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); }
 .auth-intro, .auth-fields { padding: clamp(1.5rem, 4vw, 3rem); }
@@ -44,7 +47,7 @@ h2 { font-size: 1.15rem; line-height: 1.35; }
 .steps { list-style: none; padding: 0; margin: 0; }
 .steps li { position: relative; display: flex; align-items: center; gap: .75rem; min-height: 2rem; color: #dfedfa; }
 .steps li::before { content: ''; width: .75rem; height: .75rem; border: 2px solid currentColor; border-radius: 50%; box-sizing: border-box; }
-.steps li:first-child::after { content: ''; position: absolute; top: calc(50% + .375rem); left: calc(.375rem - 1px); width: 2px; height: 1.25rem; background: #a6cee9; }
+.steps li:first-child::after { content: ''; position: absolute; top: calc(50% + .375rem); inset-inline-start: calc(.375rem - 1px); width: 2px; height: 1.25rem; background: #a6cee9; }
 .steps [aria-current] { color: white; font-weight: 700; }
 .steps [aria-current]::before { background: currentColor; }
 .auth-fields { align-self: center; min-width: 0; }

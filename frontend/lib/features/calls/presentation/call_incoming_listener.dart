@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:university_messenger/features/calls/domain/call_models.dart';
 import 'package:university_messenger/features/calls/presentation/call_providers.dart';
-import 'package:university_messenger/features/calls/presentation/call_strings.dart';
 import 'package:university_messenger/features/calls/presentation/incoming_call_screen.dart';
 
 typedef IncomingCallPresenter =
@@ -44,9 +43,7 @@ class _CallIncomingListenerState extends ConsumerState<CallIncomingListener> {
             fullscreenDialog: true,
             builder: (_) => IncomingCallScreen(
               callId: call.id,
-              peerName:
-                  widget.peerNameForCall?.call(call) ??
-                  CallStrings.unknownCaller,
+              peerName: widget.peerNameForCall?.call(call),
             ),
           ),
         );

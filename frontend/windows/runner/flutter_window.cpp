@@ -1,6 +1,10 @@
 #include "flutter_window.h"
 
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
+
 #include <optional>
+#include <variant>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -26,6 +30,29 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+
+  flutter::MethodChannel<flutter::EncodableValue> window_channel(
+      flutter_controller_->engine()->messenger(), "university_messenger/window",
+      &flutter::StandardMethodCodec::GetInstance());
+  window_channel.SetMethodCallHandler([this](const auto& call, auto result) {
+    if (call.method_name() != "setTitle") {
+      result->NotImplemented();
+      return;
+    }
+    const auto* title = std::get_if<std::string>(call.arguments());
+    if (title != nullptr) {
+      const int length = ::MultiByteToWideChar(
+          CP_UTF8, MB_ERR_INVALID_CHARS, title->c_str(), -1, nullptr, 0);
+      if (length > 0) {
+        std::wstring wide_title(length, L'\0');
+        if (::MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, title->c_str(),
+                                  -1, wide_title.data(), length) > 0) {
+          ::SetWindowTextW(GetHandle(), wide_title.c_str());
+        }
+      }
+    }
+    result->Success();
+  });
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();

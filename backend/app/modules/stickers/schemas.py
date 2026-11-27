@@ -13,6 +13,7 @@ class StickerOut(ORMModel):
 
 
 class StickerPackOut(ORMModel):
+    title_key: str | None = None
     id: UUID
     handle: str
     title: str

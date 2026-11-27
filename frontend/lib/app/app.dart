@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:university_messenger/app/app_locale.dart'
+    if (dart.library.js_interop) 'package:university_messenger/app/app_locale_web.dart';
 import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/app/router.dart';
 import 'package:university_messenger/app/theme/app_theme.dart';
 import 'package:university_messenger/features/auth/domain/account.dart';
 import 'package:university_messenger/features/calls/calls_feature.dart';
 import 'package:university_messenger/l10n/generated/app_localizations.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class UniversityMessengerApp extends ConsumerWidget {
   const UniversityMessengerApp({super.key});
@@ -20,20 +22,17 @@ class UniversityMessengerApp extends ConsumerWidget {
         AccountStatus.active;
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
-      title: 'University Messenger',
+      onGenerateTitle: (context) => context.l10n.appTitle,
       routerConfig: router,
       locale: settings.locale,
       supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: settings.themeMode,
       builder: (context, child) {
+        final l10n = context.l10n;
+        updateAppLocale(l10n, Directionality.of(context));
         if (!active || child == null) return child ?? const SizedBox.shrink();
         final calls = ref.watch(callControllerProvider).state;
         final call = calls.currentCall ?? calls.incomingCall;
@@ -64,11 +63,13 @@ class UniversityMessengerApp extends ConsumerWidget {
                             ? Icons.videocam_rounded
                             : Icons.call_rounded,
                       ),
-                      title: Text(incoming ? 'Incoming call' : 'Active call'),
+                      title: Text(
+                        incoming ? l10n.callIncoming : l10n.callActive,
+                      ),
                       subtitle: Text(
                         call.status == CallStatus.active
-                            ? 'Connected'
-                            : 'Ringing',
+                            ? l10n.callConnected
+                            : l10n.callRinging,
                       ),
                       trailing: FilledButton.tonal(
                         onPressed: () => incoming
@@ -76,7 +77,9 @@ class UniversityMessengerApp extends ConsumerWidget {
                                 CallRoutes.incomingLocation(callId: call.id),
                               )
                             : router.push(CallRoutes.active),
-                        child: Text(incoming ? 'Answer' : 'Return'),
+                        child: Text(
+                          incoming ? l10n.callAnswer : l10n.callReturn,
+                        ),
                       ),
                     ),
                   ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:university_messenger/features/communities/data/community_api.dart';
 import 'package:university_messenger/features/communities/domain/community_models.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class CommunityContent extends StatelessWidget {
   const CommunityContent({required this.child, super.key});
@@ -104,10 +105,48 @@ class CommunityAvatar extends StatelessWidget {
   }
 }
 
-String communityErrorText(Object error) => switch (error) {
-  CommunityRequestException exception => exception.message,
-  _ => 'Something went wrong. Try again.',
-};
+String communityErrorText(BuildContext context, Object? error) {
+  final l10n = context.l10n;
+  final code = error is CommunityRequestException ? error.code : null;
+  return switch (code) {
+    'invalid_handle' => l10n.communityInvalidHandle,
+    'handle_taken' => l10n.communityHandleTaken,
+    'handle_required' => l10n.communityHandleRequired,
+    'invalid_group_member' => l10n.communityInvalidGroupMember,
+    'member_banned' => l10n.communityRejoinDenied,
+    'conversation_not_found' => l10n.communityMissing,
+    'invite_not_found' => l10n.communityInviteInvalid,
+    'user_not_found' || 'handle_not_found' => l10n.communityUserMissing,
+    'already_member' => l10n.communityAlreadyMember,
+    'owner_cannot_leave' => l10n.communityOwnerCannotLeave,
+    'member_not_found' => l10n.communityMemberMissing,
+    'invalid_member_role' => l10n.communityInvalidMemberRole,
+    'conversation_not_editable' ||
+    'cannot_leave_dm' => l10n.communityDmUnavailable,
+    _ => localizedApiError(l10n, code),
+  };
+}
+
+String communityTitle(
+  BuildContext context,
+  CommunityConversation conversation,
+) {
+  if (conversation.title.isNotEmpty) return conversation.title;
+  return conversation.handle ??
+      (conversation.type == CommunityType.group
+          ? context.l10n.group
+          : context.l10n.channel);
+}
+
+String? communityDescription(
+  BuildContext context,
+  CommunityConversation conversation,
+) {
+  final name = conversation.officialDescriptionName;
+  return name == null
+      ? conversation.description
+      : context.l10n.communityOfficialDescription(name);
+}
 
 Future<bool> confirmCommunityAction(
   BuildContext context, {
@@ -124,7 +163,7 @@ Future<bool> confirmCommunityAction(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.cancel),
           ),
           destructive
               ? FilledButton(

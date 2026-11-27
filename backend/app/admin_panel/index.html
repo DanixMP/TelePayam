@@ -17,10 +17,17 @@
           <path d="M3 4h22v15H12l-6 5v-5H3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
           <path d="M8 9h12M8 14h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
-        <span>University Messenger</span>
+        <span data-i18n="appTitle">University Messenger</span>
       </div>
-      <span class="area-name">Admin panel</span>
-      <button type="button" id="sign-out" class="bar-action" hidden>Sign out</button>
+      <span class="area-name" data-i18n="adminPanel">Admin panel</span>
+      <div class="bar-controls">
+        <label class="visually-hidden" for="language" data-i18n="language">Language</label>
+        <select id="language" hidden>
+          <option value="en" data-i18n="english">English</option>
+          <option value="fa" data-i18n="persian">Persian</option>
+        </select>
+        <button type="button" id="sign-out" class="bar-action" data-i18n="signOut" hidden>Sign out</button>
+      </div>
     </div>
   </header>
 
@@ -28,29 +35,29 @@
     <noscript><p>Enable JavaScript to sign in and review student requests.</p></noscript>
     <section id="sign-in" class="auth-layout" aria-labelledby="sign-in-title">
       <div class="auth-intro">
-        <h1 id="sign-in-title">Admin sign-in</h1>
-        <p>Sign in to review student registrations and grant access to University Messenger.</p>
-        <ol class="steps" aria-label="Sign-in progress">
-          <li id="phone-step" aria-current="step">Phone number</li>
-          <li id="codes-step">Verification</li>
+        <h1 id="sign-in-title" data-i18n="adminSignIn">Admin sign-in</h1>
+        <p data-i18n="signInIntro">Sign in to review student registrations and grant access to University Messenger.</p>
+        <ol class="steps" aria-label="Sign-in progress" data-i18n-label="signInProgress">
+          <li id="phone-step" aria-current="step" data-i18n="phoneNumber">Phone number</li>
+          <li id="codes-step" data-i18n="verification">Verification</li>
         </ol>
       </div>
       <div class="auth-fields">
         <form id="phone-form" method="post">
-          <label for="phone">Admin mobile number</label>
+          <label for="phone" data-i18n="adminPhone">Admin mobile number</label>
           <input id="phone" name="phone" type="tel" inputmode="tel" dir="ltr" autocomplete="tel" maxlength="24" required aria-describedby="phone-hint">
-          <p id="phone-hint" class="hint">Use the Iranian mobile number registered to your admin account.</p>
-          <button type="submit" class="primary">Send SMS code</button>
+          <p id="phone-hint" class="hint" data-i18n="adminPhoneHint">Use the Iranian mobile number registered to your admin account.</p>
+          <button type="submit" class="primary" data-i18n="sendCode">Send SMS code</button>
         </form>
         <form id="code-form" method="post" hidden>
-          <p class="destination">Verify <bdi id="destination" dir="ltr"></bdi></p>
-          <label for="sms">SMS code</label>
+          <p class="destination"><span data-i18n="verifyNumber">Verify</span> <bdi id="destination" dir="ltr"></bdi></p>
+          <label for="sms" data-i18n="smsCode">SMS code</label>
           <input id="sms" name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" dir="ltr" autocomplete="one-time-code" required>
           <p id="dev-code" class="hint" hidden></p>
-          <button type="submit" class="primary">Sign in</button>
+          <button type="submit" class="primary" data-i18n="signIn">Sign in</button>
           <div class="form-actions">
-            <button type="button" id="resend" class="text-action">Send a new SMS code</button>
-            <button type="button" id="change-phone" class="text-action">Change number</button>
+            <button type="button" id="resend" class="text-action" data-i18n="resend">Send a new SMS code</button>
+            <button type="button" id="change-phone" class="text-action" data-i18n="changeNumber">Change number</button>
           </div>
         </form>
       </div>
@@ -63,27 +70,32 @@
     <section id="queue" aria-labelledby="queue-title" hidden>
       <div class="page-heading">
         <div>
-          <h1 id="queue-title" tabindex="-1">Student requests</h1>
-          <p>Review each registration. Approving it activates the student’s account.</p>
+          <h1 id="queue-title" tabindex="-1" data-i18n="studentRequests">Student requests</h1>
+          <p data-i18n="queueIntro">Review each registration. Approving it activates the student’s account.</p>
         </div>
-        <button type="button" id="refresh" class="secondary">Refresh list</button>
+        <button type="button" id="refresh" class="secondary" data-i18n="refresh">Refresh list</button>
       </div>
       <details id="manage-admins" hidden>
-        <summary>Add admin</summary>
+        <summary data-i18n="addAdmin">Add admin</summary>
         <form id="add-admin-form" method="post">
-          <label for="new-admin-phone">New admin’s mobile number</label>
+          <label for="new-admin-phone" data-i18n="newAdminPhone">New admin’s mobile number</label>
           <input id="new-admin-phone" type="tel" dir="ltr" autocomplete="off" maxlength="32" required aria-describedby="new-admin-hint">
-          <p id="new-admin-hint" class="hint">Use an unregistered number. This admin can review students but cannot add other admins.</p>
-          <button type="submit" class="primary">Create admin</button>
+          <p id="new-admin-hint" class="hint" data-i18n="newAdminHint">Use an unregistered number. This admin can review students but cannot add other admins.</p>
+          <button type="submit" class="primary" data-i18n="createAdmin">Create admin</button>
         </form>
       </details>
       <div class="queue-surface">
-        <h2>Awaiting review <span id="count" class="count" hidden></span></h2>
+        <h2><span data-i18n="awaitingReview">Awaiting review</span> <span id="count" class="count" hidden></span></h2>
         <p id="queue-state" class="queue-state">Loading registrations…</p>
         <table id="requests" hidden>
-          <caption class="visually-hidden">Student registrations awaiting approval, oldest first</caption>
+          <caption class="visually-hidden" data-i18n="tableCaption">Student registrations awaiting approval, oldest first</caption>
           <thead>
-            <tr><th scope="col">Student</th><th scope="col">Program</th><th scope="col">National ID</th><th scope="col"><span class="visually-hidden">Action</span></th></tr>
+            <tr>
+              <th scope="col" data-i18n="student">Student</th>
+              <th scope="col" data-i18n="program">Program</th>
+              <th scope="col" data-i18n="nationalId">National ID</th>
+              <th scope="col"><span class="visually-hidden" data-i18n="action">Action</span></th>
+            </tr>
           </thead>
           <tbody id="rows"></tbody>
         </table>
@@ -93,10 +105,10 @@
 
   <template id="request-row">
     <tr>
-      <th scope="row" tabindex="-1"><bdi class="student-name"></bdi><span class="detail">University ID: <bdi class="university-id" dir="ltr"></bdi></span></th>
-      <td><bdi class="department"></bdi><span class="detail degree"></span></td>
-      <td><span class="mobile-label">National ID: </span><bdi class="national-id" dir="ltr"></bdi></td>
-      <td class="row-action"><button type="button" class="primary approve">Approve</button></td>
+      <th scope="row" tabindex="-1"><bdi class="student-name"></bdi><span class="detail"><span data-i18n="universityId">University ID:</span> <bdi class="university-id" dir="ltr"></bdi></span></th>
+      <td><bdi class="department"></bdi><span class="detail"><bdi class="degree"></bdi></span></td>
+      <td><span class="mobile-label" data-i18n="nationalIdLabel">National ID:</span> <bdi class="national-id" dir="ltr"></bdi></td>
+      <td class="row-action"><button type="button" class="primary approve" data-i18n="approve">Approve</button></td>
     </tr>
   </template>
 </body>

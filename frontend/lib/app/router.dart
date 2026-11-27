@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:university_messenger/app/providers.dart';
@@ -21,6 +22,8 @@ import 'package:university_messenger/features/registration/presentation/rejected
 import 'package:university_messenger/features/registration/presentation/student_profile_screen.dart';
 import 'package:university_messenger/features/reports/reports.dart';
 import 'package:university_messenger/features/services/services.dart';
+import 'package:university_messenger/features/settings/settings_screen.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.read(authControllerProvider);
@@ -28,8 +31,21 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     refreshListenable: auth,
     redirect: (context, state) => _redirect(auth.state, state.uri.path),
+    errorBuilder: (context, _) => Scaffold(
+      appBar: AppBar(title: Text(context.l10n.pageNotFound)),
+      body: Center(
+        child: TextButton(
+          onPressed: () => context.go('/welcome'),
+          child: Text(context.l10n.continueLabel),
+        ),
+      ),
+    ),
     routes: [
       GoRoute(path: '/splash', builder: (_, _) => const SplashScreen()),
+      GoRoute(
+        path: SettingsScreen.path,
+        builder: (_, _) => const SettingsScreen(),
+      ),
       GoRoute(path: '/welcome', builder: (_, _) => const WelcomeScreen()),
       GoRoute(path: '/phone', builder: (_, _) => const PhoneScreen()),
       GoRoute(path: '/otp', builder: (_, _) => const OtpScreen()),
@@ -85,7 +101,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => OutgoingCallScreen(
           conversationId: state.uri.queryParameters['conversationId'] ?? '',
           kind: CallKind.fromJson(state.uri.queryParameters['kind']),
-          peerName: state.uri.queryParameters['peerName'] ?? 'Unknown caller',
+          peerName: state.uri.queryParameters['peerName'],
         ),
       ),
       GoRoute(
@@ -93,15 +109,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: CallRoutes.incomingName,
         builder: (_, state) => IncomingCallScreen(
           callId: state.uri.queryParameters['callId'],
-          peerName: state.uri.queryParameters['peerName'] ?? 'Unknown caller',
+          peerName: state.uri.queryParameters['peerName'],
         ),
       ),
       GoRoute(
         path: CallRoutes.active,
         name: CallRoutes.activeName,
-        builder: (_, state) => ActiveCallScreen(
-          peerName: state.uri.queryParameters['peerName'] ?? 'Unknown caller',
-        ),
+        builder: (_, state) =>
+            ActiveCallScreen(peerName: state.uri.queryParameters['peerName']),
       ),
       GoRoute(
         path: '/register/student/review',
@@ -139,6 +154,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 });
 
 String? _redirect(AuthState auth, String path) {
+  if (path == SettingsScreen.path) return null;
   switch (auth.stage) {
     case AuthFlowStage.booting:
       return path == '/splash' ? null : '/splash';

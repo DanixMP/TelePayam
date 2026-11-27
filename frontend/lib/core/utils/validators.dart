@@ -1,5 +1,10 @@
+String asciiDigits(String input) => input.replaceAllMapped(
+  RegExp(r'[۰-۹٠-٩]'),
+  (match) => (match[0]!.codeUnitAt(0) & 0x0f).toString(),
+);
+
 String normalizeIranianPhone(String input) {
-  final digits = input.replaceAll(RegExp(r'\D'), '');
+  final digits = asciiDigits(input).replaceAll(RegExp(r'\D'), '');
   if (digits.startsWith('0098') && digits.length == 14) {
     return '+98${digits.substring(4)}';
   }
@@ -17,7 +22,7 @@ bool isValidIranianPhone(String input) =>
     RegExp(r'^\+989\d{9}$').hasMatch(normalizeIranianPhone(input));
 
 bool isValidIranianNationalId(String input) {
-  final value = input.replaceAll(RegExp(r'\D'), '');
+  final value = asciiDigits(input).replaceAll(RegExp(r'\D'), '');
   if (value.length != 10 || RegExp(r'^(\d)\1{9}$').hasMatch(value)) {
     return false;
   }

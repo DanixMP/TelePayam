@@ -1,9 +1,101 @@
+import { translations } from "./translations.js";
+
 const $ = (selector) => document.querySelector(selector);
 const apiRoot = new URL("../api/v1/", import.meta.url);
+const languageKey = "admin.locale";
+const feedback = { status: [], error: [] };
+let locale = "en";
+let queueState = "loading";
+let developmentCode = null;
 let phone = "";
 let session = null; // This tab only: never persist admin credentials in browser storage.
 let registrations = null;
 let busy = false;
+
+function text(key, ...args) {
+  const message = translations[locale][key];
+  return typeof message === "function" ? message(...args) : message;
+}
+
+// Isolate names and identifiers interpolated into mixed-direction sentences.
+const isolate = (value) => `\u2068${value}\u2069`;
+
+function translate(root) {
+  root.querySelectorAll("[data-i18n]").forEach((element) => {
+    element.textContent = text(element.dataset.i18n);
+  });
+  root.querySelectorAll("[data-i18n-label]").forEach((element) => {
+    element.setAttribute("aria-label", text(element.dataset.i18nLabel));
+  });
+}
+
+function labelApproval(button, name) {
+  button.setAttribute("aria-label", text(button.dataset.i18n === "approving" ? "approving" : "approveStudent", isolate(name)));
+}
+
+function degreeLabel(degree) {
+  switch (degree.trim().toLowerCase()) {
+    case "bsc": case "bachelor": case "bachelor’s": case "bachelor's": case "کارشناسی":
+      return text("degreeBachelor");
+    case "msc": case "master": case "master’s": case "master's": case "کارشناسی ارشد":
+      return text("degreeMaster");
+    case "phd": case "doctorate": case "دکتری":
+      return text("degreeDoctorate");
+    case "other": case "سایر":
+      return text("degreeOther");
+    default:
+      return degree;
+  }
+}
+
+function setFeedback(channel, ...message) {
+  feedback[channel] = message;
+  $(`#${channel}`).textContent = message.length ? text(...message) : "";
+}
+
+function renderDevelopmentCode() {
+  $("#dev-code").hidden = !developmentCode;
+  $("#dev-code").textContent = developmentCode ? text("developmentCode", isolate(developmentCode)) : "";
+}
+
+function renderQueueState() {
+  $("#count").textContent = registrations === null ? "" : new Intl.NumberFormat(locale).format(registrations.length);
+  $("#queue-state").textContent = text(queueState);
+}
+
+function applyLocale(value) {
+  locale = value === "fa" ? "fa" : "en";
+  document.documentElement.lang = locale;
+  document.documentElement.dir = locale === "fa" ? "rtl" : "ltr";
+  document.title = text("pageTitle");
+  $("#language").value = locale;
+  translate(document);
+  Array.from($("#rows").rows).forEach((row, index) => {
+    row.querySelector(".degree").textContent = degreeLabel(registrations[index].degree);
+    labelApproval(row.querySelector(".approve"), row.querySelector(".student-name").textContent);
+  });
+  renderDevelopmentCode();
+  renderQueueState();
+  setFeedback("status", ...feedback.status);
+  setFeedback("error", ...feedback.error);
+}
+
+function errorKey(error) {
+  switch (error.code) {
+    case "network_error": return "networkError";
+    case "otp_expired":
+    case "otp_locked": return "codeUnavailable";
+    case "otp_invalid": return "incorrectCode";
+    case "otp_rate_limited": return "rateLimited";
+    case "invalid_phone": return "invalidPhone";
+    case "phone_exists": return "phoneExists";
+    case "account_blocked":
+    case "admin_access_required": return "adminAccess";
+    case "totp_invalid":
+    case "totp_setup_required": return "authenticatorRequired";
+    default: return error.status === 429 ? "rateLimited" : "requestFailed";
+  }
+}
 
 async function api(path, { body, token, keepalive = false } = {}) {
   const headers = { Accept: "application/json" };
@@ -16,13 +108,14 @@ async function api(path, { body, token, keepalive = false } = {}) {
       credentials: "omit", cache: "no-store", keepalive,
     });
   } catch {
-    throw new Error("Could not reach the server. Check your connection and try again.");
+    throw Object.assign(new Error("network_error"), { code: "network_error" });
   }
   if (response.status === 204) return;
   if (!response.ok) {
-    const { error } = await response.json().catch(() => ({}));
-    throw Object.assign(new Error(error?.detail || "The request failed. Please try again."), {
-      status: response.status, code: error?.code,
+    const result = await response.json().catch(() => null);
+    const code = result?.error?.code;
+    throw Object.assign(new Error(code), {
+      status: response.status, code,
     });
   }
   return response.json();
@@ -37,7 +130,7 @@ function revoke(pair, keepalive = false) {
 async function acceptSession(pair) {
   if (!["admin", "super_admin"].includes(pair.user.role) || pair.user.status !== "active") {
     await revoke(pair).catch(() => {});
-    throw Object.assign(new Error("Only an active administrator can access this panel."), { status: 403 });
+    throw Object.assign(new Error("admin_access_required"), { status: 403, code: "admin_access_required" });
   }
   session = pair;
   $("#manage-admins").hidden = pair.user.role !== "super_admin";
@@ -61,8 +154,8 @@ function showCodes(show) {
   $(show ? "#phone-step" : "#codes-step").removeAttribute("aria-current");
   $(show ? "#codes-step" : "#phone-step").setAttribute("aria-current", "step");
   $("#code-form").reset();
-  $("#dev-code").textContent = "";
-  $("#dev-code").hidden = true;
+  developmentCode = null;
+  renderDevelopmentCode();
   $("#destination").textContent = show ? phone : "";
   $(show ? "#sms" : "#phone").focus();
 }
@@ -87,22 +180,21 @@ async function run(action) {
   busy = true;
   const trigger = document.activeElement;
   let focusAfter;
-  $("#error").textContent = $("#status").textContent = "";
+  setFeedback("error");
+  setFeedback("status");
   document.querySelectorAll("button").forEach((button) => { button.disabled = true; });
   document.querySelectorAll("input").forEach((input) => { input.readOnly = true; });
   try {
     focusAfter = await action();
   } catch (error) {
-    let message = error.message;
+    let message = errorKey(error);
     if (session && [401, 403].includes(error.status)) {
       const old = session;
       signedOut();
       void revoke(old).catch(() => {});
-      message = "Your admin session has ended. Sign in again.";
-    } else if (["otp_expired", "otp_locked"].includes(error.code)) {
-      message = "This SMS code can no longer be used. Request a new code and try again.";
+      message = "sessionEnded";
     }
-    $("#error").textContent = message;
+    setFeedback("error", message);
     if (document.activeElement === document.body && trigger instanceof HTMLButtonElement && trigger.isConnected) {
       focusAfter = trigger;
     }
@@ -118,11 +210,9 @@ async function sendCode() {
   phone = $("#phone").value.trim();
   const result = await api("auth/otp/request", { body: { phone } });
   showCodes(true);
-  if (result.development_code) {
-    $("#dev-code").textContent = `Development SMS code: ${result.development_code}`;
-    $("#dev-code").hidden = false;
-  }
-  $("#status").textContent = "A new SMS code was requested.";
+  developmentCode = result.development_code;
+  renderDevelopmentCode();
+  setFeedback("status", "codeRequested");
 }
 
 function renderQueue(items) {
@@ -130,20 +220,21 @@ function renderQueue(items) {
   const rows = $("#rows");
   rows.replaceChildren();
   $("#count").hidden = items === null;
-  $("#count").textContent = items?.length ?? "";
   $("#requests").hidden = !items?.length;
   $("#queue-state").hidden = Boolean(items?.length);
-  $("#queue-state").textContent = items === null ? "Loading registrations…" : "No pending registrations.";
+  queueState = items === null ? "loading" : "noPending";
+  renderQueueState();
   for (const item of items || []) {
     const row = $("#request-row").content.cloneNode(true);
     const name = [item.first_name, item.last_name].filter(Boolean).join(" ") || item.university_id;
     row.querySelector(".student-name").textContent = name;
     row.querySelector(".university-id").textContent = item.university_id;
     row.querySelector(".department").textContent = item.department;
-    row.querySelector(".degree").textContent = item.degree;
+    row.querySelector(".degree").textContent = degreeLabel(item.degree);
     row.querySelector(".national-id").textContent = item.national_id_masked;
     const button = row.querySelector(".approve");
-    button.setAttribute("aria-label", `Approve ${name}`);
+    translate(row);
+    labelApproval(button, name);
     button.addEventListener("click", () => run(() => approve(item.id, name, button)));
     rows.append(row);
   }
@@ -153,74 +244,91 @@ async function loadQueue() {
   try {
     renderQueue(await adminApi("approvals"));
   } catch (error) {
-    if (registrations === null) $("#queue-state").textContent = "Use Refresh list to load registrations again.";
+    if (registrations === null) {
+      queueState = "retryQueue";
+      renderQueueState();
+    }
     throw error;
   }
 }
 
 async function approve(id, name, button) {
   const index = registrations.findIndex((item) => item.id === id);
-  button.textContent = "Approving…";
+  button.dataset.i18n = "approving";
+  button.textContent = text("approving");
+  labelApproval(button, name);
   try {
     await adminApi(`approvals/${encodeURIComponent(id)}`, { action: "approve" });
     renderQueue(registrations.filter((item) => item.id !== id));
-    $("#status").textContent = `${name} was approved. The student account is active.`;
+    setFeedback("status", "approved", isolate(name));
   } catch (error) {
     if (error.code !== "approval_not_found") throw error;
     await loadQueue();
-    $("#status").textContent = "This registration is no longer pending. The list has been refreshed.";
+    setFeedback("status", "approvalReviewed");
   } finally {
-    button.textContent = "Approve";
+    button.dataset.i18n = "approve";
+    button.textContent = text("approve");
+    labelApproval(button, name);
   }
   const remaining = $("#rows").querySelectorAll("th[scope=row]");
   return remaining[Math.min(index, remaining.length - 1)] ?? $("#refresh");
 }
 
-$("#phone-form").addEventListener("submit", (event) => { event.preventDefault(); run(sendCode); });
+function submit(form, input, invalidMessage, action) {
+  form.noValidate = true;
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (busy) return;
+    if (!input.validity.valid || !input.value.trim()) {
+      setFeedback("status");
+      setFeedback("error", invalidMessage);
+      input.focus();
+      return;
+    }
+    run(action);
+  });
+}
+
+submit($("#phone-form"), $("#phone"), "invalidPhone", sendCode);
 $("#resend").addEventListener("click", () => run(sendCode));
 $("#change-phone").addEventListener("click", () => run(() => showCodes(false)));
-$("#code-form").addEventListener("submit", (event) => {
-  event.preventDefault();
-  run(async () => {
-    await acceptSession(await api("auth/otp/verify", { body: {
-      phone, code: $("#sms").value,
-      platform: "web", device_name: "Admin panel",
-    } }));
-    showCodes(false);
-    $("#phone-form").reset();
-    $("#sign-in").hidden = true;
-    $("#queue").hidden = $("#sign-out").hidden = false;
-    $(".queue-surface").before($("#feedback"));
-    $("#queue-title").focus();
-    await loadQueue();
-  });
+submit($("#code-form"), $("#sms"), "invalidCode", async () => {
+  await acceptSession(await api("auth/otp/verify", { body: {
+    phone, code: $("#sms").value,
+    platform: "web", device_name: text("adminPanel"),
+  } }));
+  showCodes(false);
+  $("#phone-form").reset();
+  $("#sign-in").hidden = true;
+  $("#queue").hidden = $("#sign-out").hidden = false;
+  $(".queue-surface").before($("#feedback"));
+  $("#queue-title").focus();
+  await loadQueue();
 });
-$("#add-admin-form").addEventListener("submit", (event) => {
-  event.preventDefault();
-  run(async () => {
-    const added = await adminApi("admins", { phone: $("#new-admin-phone").value.trim() });
-    $("#add-admin-form").reset();
-    $("#status").textContent = `Admin added: ${added.phone}. They can now sign in with their SMS code.`;
-  });
+submit($("#add-admin-form"), $("#new-admin-phone"), "invalidPhone", async () => {
+  const added = await adminApi("admins", { phone: $("#new-admin-phone").value.trim() });
+  $("#add-admin-form").reset();
+  setFeedback("status", "adminAdded", isolate(added.phone));
 });
 $("#refresh").addEventListener("click", () => run(async () => {
   await loadQueue();
-  $("#status").textContent = "Registration list refreshed.";
+  setFeedback("status", "refreshed");
 }));
 $("#sign-out").addEventListener("click", () => run(async () => {
   const old = session;
   signedOut();
   try {
     await revoke(old);
-    $("#status").textContent = "Signed out.";
+    setFeedback("status", "signedOut");
   } catch {
-    $("#error").textContent = "Signed out of this tab. The server could not confirm sign-out.";
+    setFeedback("error", "unconfirmedSignOut");
   }
 }));
 window.addEventListener("pagehide", () => {
   if (session) void revoke(session, true).catch(() => {});
   signedOut();
-  $("#status").textContent = $("#error").textContent = "";
+  setFeedback("status");
+  setFeedback("error");
 });
 
 // Accept Persian and Arabic numerals from mobile keyboards before HTML validation.
@@ -228,3 +336,12 @@ document.querySelectorAll("input").forEach((input) => input.addEventListener("in
   const ascii = input.value.replace(/[۰-۹٠-٩]/g, (digit) => String(digit.charCodeAt(0) & 15));
   if (ascii !== input.value) input.value = ascii;
 }));
+
+let savedLocale;
+try { savedLocale = localStorage.getItem(languageKey); } catch { /* Storage may be disabled. */ }
+applyLocale(savedLocale);
+$("#language").hidden = false;
+$("#language").addEventListener("change", (event) => {
+  applyLocale(event.target.value);
+  try { localStorage.setItem(languageKey, locale); } catch { /* Apply in this tab anyway. */ }
+});

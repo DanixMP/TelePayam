@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/core/network/api_client.dart';
+import 'package:university_messenger/core/network/api_exception.dart';
 import 'package:university_messenger/features/communities/domain/community_models.dart';
 
 final communityApiProvider = Provider<CommunityApi>(
@@ -107,6 +108,7 @@ class CommunityApi {
     required String conversationId,
     required String title,
     required String? description,
+    bool updateDescription = true,
     required CommunityVisibility visibility,
     required String? handle,
   }) => _guard(() async {
@@ -114,7 +116,7 @@ class CommunityApi {
       '/conversations/$conversationId',
       data: {
         'title': title.trim(),
-        'description': _nullableText(description),
+        if (updateDescription) 'description': _nullableText(description),
         'visibility': visibility.name,
         'handle': _nullableText(handle),
       },
@@ -253,18 +255,8 @@ class CommunityApi {
     try {
       return await request();
     } on DioException catch (error) {
-      final body = error.response?.data;
-      final envelope = body is Map ? body['error'] : null;
-      if (envelope is Map) {
-        throw CommunityRequestException(
-          envelope['code']?.toString() ?? 'request_failed',
-          envelope['detail']?.toString() ?? 'Request failed',
-        );
-      }
-      throw CommunityRequestException(
-        'network_error',
-        error.message ?? 'Network request failed',
-      );
+      final failure = ApiException.fromDio(error);
+      throw CommunityRequestException(failure.code, failure.detail);
     }
   }
 }

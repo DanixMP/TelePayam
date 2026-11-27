@@ -5,6 +5,7 @@ import 'package:university_messenger/features/auth/domain/account.dart';
 import 'package:university_messenger/features/communities/data/community_api.dart';
 import 'package:university_messenger/features/communities/domain/community_models.dart';
 import 'package:university_messenger/features/communities/presentation/community_widgets.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 enum CommunityCreationKind { group, channel }
 
@@ -63,7 +64,9 @@ class _CommunityCreateScreenState extends ConsumerState<CommunityCreateScreen> {
       widget.onCreated?.call(conversation);
       Navigator.pop(context, conversation);
     } catch (error) {
-      if (mounted) showCommunityMessage(context, communityErrorText(error));
+      if (mounted) {
+        showCommunityMessage(context, communityErrorText(context, error));
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -71,28 +74,29 @@ class _CommunityCreateScreenState extends ConsumerState<CommunityCreateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final role = ref.watch(authControllerProvider).state.account?.role;
     final canCreateChannel =
         role == UserRole.student || role == UserRole.professor;
     final canCreateGroup = role == UserRole.student;
     if (_kind == CommunityCreationKind.group && !canCreateGroup) {
-      return const Scaffold(
+      return Scaffold(
         body: SafeArea(
           child: CommunityStateMessage(
             icon: Icons.lock_outline_rounded,
-            title: 'Student groups are unavailable',
-            body: 'Only student accounts can create student groups.',
+            title: l10n.communityGroupsUnavailable,
+            body: l10n.communityGroupsUnavailableBody,
           ),
         ),
       );
     }
     if (!canCreateChannel) {
-      return const Scaffold(
+      return Scaffold(
         body: SafeArea(
           child: CommunityStateMessage(
             icon: Icons.lock_outline_rounded,
-            title: 'Channel creation is unavailable',
-            body: 'Only student and professor accounts can create channels.',
+            title: l10n.communityChannelsUnavailable,
+            body: l10n.communityChannelsUnavailableBody,
           ),
         ),
       );
@@ -101,8 +105,8 @@ class _CommunityCreateScreenState extends ConsumerState<CommunityCreateScreen> {
       appBar: AppBar(
         title: Text(
           _kind == CommunityCreationKind.group
-              ? 'Create student group'
-              : 'Create channel',
+              ? l10n.communityCreateStudentGroup
+              : l10n.createChannel,
         ),
       ),
       body: CommunityContent(
@@ -113,16 +117,16 @@ class _CommunityCreateScreenState extends ConsumerState<CommunityCreateScreen> {
             children: [
               if (canCreateGroup)
                 SegmentedButton<CommunityCreationKind>(
-                  segments: const [
+                  segments: [
                     ButtonSegment(
                       value: CommunityCreationKind.group,
-                      icon: Icon(Icons.groups_rounded),
-                      label: Text('Student group'),
+                      icon: const Icon(Icons.groups_rounded),
+                      label: Text(l10n.communityStudentGroup),
                     ),
                     ButtonSegment(
                       value: CommunityCreationKind.channel,
-                      icon: Icon(Icons.campaign_rounded),
-                      label: Text('Channel'),
+                      icon: const Icon(Icons.campaign_rounded),
+                      label: Text(l10n.channel),
                     ),
                   ],
                   selected: {_kind},
@@ -135,12 +139,12 @@ class _CommunityCreateScreenState extends ConsumerState<CommunityCreateScreen> {
                 autofocus: true,
                 maxLength: 180,
                 textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  prefixIcon: Icon(Icons.title_rounded),
+                decoration: InputDecoration(
+                  labelText: l10n.name,
+                  prefixIcon: const Icon(Icons.title_rounded),
                 ),
                 validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Enter a name.'
+                    ? l10n.enterName
                     : null,
               ),
               const SizedBox(height: 12),
@@ -150,27 +154,27 @@ class _CommunityCreateScreenState extends ConsumerState<CommunityCreateScreen> {
                 minLines: 3,
                 maxLines: 5,
                 textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Description (optional)',
+                decoration: InputDecoration(
+                  labelText: l10n.descriptionOptional,
                   alignLabelWithHint: true,
-                  prefixIcon: Icon(Icons.notes_rounded),
+                  prefixIcon: const Icon(Icons.notes_rounded),
                 ),
               ),
               const SizedBox(height: 4),
               DropdownButtonFormField<CommunityVisibility>(
                 initialValue: _visibility,
-                decoration: const InputDecoration(
-                  labelText: 'Visibility',
-                  prefixIcon: Icon(Icons.visibility_rounded),
+                decoration: InputDecoration(
+                  labelText: l10n.visibility,
+                  prefixIcon: const Icon(Icons.visibility_rounded),
                 ),
-                items: const [
+                items: [
                   DropdownMenuItem(
                     value: CommunityVisibility.public,
-                    child: Text('Public'),
+                    child: Text(l10n.publicVisibility),
                   ),
                   DropdownMenuItem(
                     value: CommunityVisibility.private,
-                    child: Text('Private'),
+                    child: Text(l10n.privateVisibility),
                   ),
                 ],
                 onChanged: (value) =>
@@ -184,18 +188,18 @@ class _CommunityCreateScreenState extends ConsumerState<CommunityCreateScreen> {
                 textCapitalization: TextCapitalization.none,
                 decoration: InputDecoration(
                   labelText: _visibility == CommunityVisibility.public
-                      ? 'Handle'
-                      : 'Handle (optional)',
+                      ? l10n.username
+                      : l10n.handleOptional,
                   prefixText: '@',
                   helperText: _visibility == CommunityVisibility.public
-                      ? 'A handle is required for public communities.'
+                      ? l10n.communityHandleRequired
                       : null,
                 ),
                 validator: (value) {
                   final handle = value?.trim() ?? '';
                   if (_visibility == CommunityVisibility.public &&
                       handle.isEmpty) {
-                    return 'Enter a handle.';
+                    return l10n.communityHandleRequired;
                   }
                   return null;
                 },
@@ -206,12 +210,10 @@ class _CommunityCreateScreenState extends ConsumerState<CommunityCreateScreen> {
                 Card(
                   elevation: 0,
                   color: Theme.of(context).colorScheme.tertiaryContainer,
-                  child: const ListTile(
-                    leading: Icon(Icons.verified_rounded),
-                    title: Text('Professor channel'),
-                    subtitle: Text(
-                      'This channel will appear in professor channel discovery.',
-                    ),
+                  child: ListTile(
+                    leading: const Icon(Icons.verified_rounded),
+                    title: Text(l10n.communityProfessorChannel),
+                    subtitle: Text(l10n.communityProfessorChannelHelp),
                   ),
                 ),
               ],
@@ -226,8 +228,8 @@ class _CommunityCreateScreenState extends ConsumerState<CommunityCreateScreen> {
                     : const Icon(Icons.add_rounded),
                 label: Text(
                   _kind == CommunityCreationKind.group
-                      ? 'Create group'
-                      : 'Create channel',
+                      ? l10n.createGroup
+                      : l10n.createChannel,
                 ),
               ),
             ],

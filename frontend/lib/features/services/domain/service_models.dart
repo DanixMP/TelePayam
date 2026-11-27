@@ -59,7 +59,7 @@ class ServiceFieldDefinition {
       final map = _stringMap(schema);
       return ServiceFieldDefinition(
         key: key,
-        label: (map['label'] ?? map['title'])?.toString() ?? _humanize(key),
+        label: (map['label'] ?? map['title'])?.toString(),
         type: (map['type'] ?? map['format'] ?? 'text').toString().toLowerCase(),
         required: map['required'] is bool ? map['required'] as bool : true,
         description: (map['description'] ?? map['help_text'])?.toString(),
@@ -71,7 +71,7 @@ class ServiceFieldDefinition {
     if (schema is List) {
       return ServiceFieldDefinition(
         key: key,
-        label: _humanize(key),
+        label: null,
         type: 'select',
         required: true,
         options: _options(schema),
@@ -97,14 +97,14 @@ class ServiceFieldDefinition {
       key: key,
       label: value.isNotEmpty && !types.contains(value.toLowerCase())
           ? value
-          : _humanize(key),
+          : null,
       type: types.contains(value.toLowerCase()) ? value.toLowerCase() : 'text',
       required: true,
     );
   }
 
   final String key;
-  final String label;
+  final String? label;
   final String type;
   final bool required;
   final String? description;
@@ -338,15 +338,3 @@ List<String> _options(Object? value) {
 DateTime _date(Object? value) =>
     DateTime.tryParse(value?.toString() ?? '') ??
     DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
-
-String _humanize(String value) {
-  final spaced = value
-      .replaceAll(RegExp(r'[_-]+'), ' ')
-      .replaceAllMapped(
-        RegExp(r'([a-z])([A-Z])'),
-        (match) => '${match.group(1)} ${match.group(2)}',
-      )
-      .trim();
-  if (spaced.isEmpty) return value;
-  return '${spaced[0].toUpperCase()}${spaced.substring(1)}';
-}

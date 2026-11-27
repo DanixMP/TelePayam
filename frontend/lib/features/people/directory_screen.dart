@@ -16,7 +16,7 @@ class _DirectoryState extends ConsumerState<DirectoryScreen> {
   late final query = TextEditingController(text: widget.initialQuery);
   List<Map<String, dynamic>>? results;
   bool busy = false;
-  String? error;
+  String? errorCode;
   @override
   void initState() {
     super.initState();
@@ -38,14 +38,14 @@ class _DirectoryState extends ConsumerState<DirectoryScreen> {
     final term = query.text.trim().replaceFirst(RegExp(r'^@'), '');
     if (term.length < 2) {
       setState(() {
-        error = context.l10n.searchIdHint;
+        errorCode = 'query_too_short';
         results = null;
       });
       return;
     }
     setState(() {
       busy = true;
-      error = null;
+      errorCode = null;
       results = null;
     });
     try {
@@ -56,8 +56,10 @@ class _DirectoryState extends ConsumerState<DirectoryScreen> {
       if (mounted) {
         setState(() => results = response.data!.cast<Map<String, dynamic>>());
       }
-    } catch (_) {
-      if (mounted) setState(() => error = context.l10n.genericError);
+    } catch (error) {
+      if (mounted) {
+        setState(() => errorCode = apiErrorCode(error) ?? 'request_failed');
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -71,7 +73,7 @@ class _DirectoryState extends ConsumerState<DirectoryScreen> {
     }
     setState(() {
       busy = true;
-      error = null;
+      errorCode = null;
     });
     try {
       final chat = await ref.read(chatRepositoryProvider).openDm(id);
@@ -79,8 +81,10 @@ class _DirectoryState extends ConsumerState<DirectoryScreen> {
         ref.read(chatSearchProvider.notifier).state = '';
         context.go('/home/chat/$chat');
       }
-    } catch (_) {
-      if (mounted) setState(() => error = context.l10n.genericError);
+    } catch (error) {
+      if (mounted) {
+        setState(() => errorCode = apiErrorCode(error) ?? 'request_failed');
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -117,10 +121,14 @@ class _DirectoryState extends ConsumerState<DirectoryScreen> {
                     ),
                   ),
                   if (busy) const LinearProgressIndicator(),
-                  if (error != null)
+                  if (errorCode != null)
                     Padding(
                       padding: const EdgeInsets.all(12),
-                      child: Text(error!),
+                      child: Text(switch (errorCode) {
+                        'query_too_short' => l.searchIdHint,
+                        'search_rate_limited' => l.directorySearchRateLimited,
+                        _ => localizedApiError(l, errorCode),
+                      }),
                     ),
                   if (results?.isEmpty == true)
                     Padding(
@@ -132,6 +140,8 @@ class _DirectoryState extends ConsumerState<DirectoryScreen> {
                       itemCount: results?.length ?? 0,
                       itemBuilder: (_, index) {
                         final item = results![index];
+                        final title = item['title'] as String?;
+                        final handle = item['handle'] as String?;
                         return ListTile(
                           leading: ContactAvatar(
                             id: item['avatar_id'] as String?,
@@ -143,15 +153,19 @@ class _DirectoryState extends ConsumerState<DirectoryScreen> {
                               ),
                             ),
                           ),
-                          title: Text(item['title'] as String),
+                          title: Text(
+                            title == null || title.trim().isEmpty
+                                ? l.account
+                                : title,
+                          ),
                           subtitle: Text(
-                            '@${item['handle']}',
+                            handle == null ? item['id'] as String : '@$handle',
                             textDirection: TextDirection.ltr,
                           ),
                           trailing: Icon(
                             item['kind'] == 'user'
                                 ? Icons.chat_bubble_outline
-                                : Icons.chevron_right,
+                                : Icons.navigate_next_rounded,
                           ),
                           onTap: busy ? null : () => open(item),
                         );

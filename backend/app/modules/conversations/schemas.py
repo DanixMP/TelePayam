@@ -22,8 +22,12 @@ class ConversationOut(ORMModel):
     created_at: datetime
     updated_at: datetime
     avatar_id: UUID | None = None
+    is_saved_messages: bool = False
+    official_description_name: str | None = None
     last_message_body: str | None = None
+    last_message_type: str | None = None
     last_message_at: datetime | None = None
+    last_message_edited_at: datetime | None = None
     my_role: str | None = None
     last_read_seq: int = 0
     under_review: bool = False

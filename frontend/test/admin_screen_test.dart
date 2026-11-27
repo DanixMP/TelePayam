@@ -86,6 +86,22 @@ Future<_Queue> _openApp(WidgetTester tester, String role) async {
 }
 
 void main() {
+  testWidgets('admin settings relocalize the open review queue', (
+    tester,
+  ) async {
+    await _openApp(tester, 'admin');
+    expect(find.textContaining('Master’s'), findsOneWidget);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Persian'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(AdminScreen), findsOneWidget);
+    expect(find.textContaining('کارشناسی ارشد'), findsOneWidget);
+    expect(find.textContaining('Master’s'), findsNothing);
+  });
+
   testWidgets(
     'ordinary admin lands on review and can approve, but cannot add admins',
     (tester) async {

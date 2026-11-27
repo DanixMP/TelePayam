@@ -1,49 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:university_messenger/core/network/api_exception.dart';
 import 'package:university_messenger/features/reports/domain/report_models.dart';
-import 'package:university_messenger/features/reports/report_strings.dart';
+import 'package:university_messenger/l10n/generated/app_localizations.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
-String reportTargetLabel(ReportTargetType type) => switch (type) {
-  ReportTargetType.message => ReportStrings.targetMessage,
-  ReportTargetType.user => ReportStrings.targetUser,
-  ReportTargetType.group => ReportStrings.targetGroup,
-  ReportTargetType.channel => ReportStrings.targetChannel,
-  ReportTargetType.unknown => ReportStrings.targetUnknown,
+String reportTargetLabel(AppLocalizations l10n, ReportTargetType type) =>
+    switch (type) {
+      ReportTargetType.message => l10n.message,
+      ReportTargetType.user => l10n.account,
+      ReportTargetType.group => l10n.group,
+      ReportTargetType.channel => l10n.channel,
+      ReportTargetType.unknown => l10n.reportTargetUnknown,
+    };
+
+String reportStatusLabel(AppLocalizations l10n, ReportStatus status) =>
+    switch (status) {
+      ReportStatus.open => l10n.open,
+      ReportStatus.assigned => l10n.reportStatusAssigned,
+      ReportStatus.resolved => l10n.reportStatusResolved,
+      ReportStatus.dismissed => l10n.reportStatusDismissed,
+      ReportStatus.unknown => l10n.unknown,
+    };
+
+String resolutionOutcomeLabel(
+  AppLocalizations l10n,
+  ResolutionOutcome outcome,
+) => switch (outcome) {
+  ResolutionOutcome.dismiss => l10n.reportStatusDismissed,
+  ResolutionOutcome.warn => l10n.reportOutcomeWarn,
+  ResolutionOutcome.mute => l10n.reportOutcomeMute,
+  ResolutionOutcome.removeContent => l10n.reportOutcomeRemoveContent,
+  ResolutionOutcome.ban => l10n.reportOutcomeBan,
+  ResolutionOutcome.escalate => l10n.reportOutcomeEscalate,
+  ResolutionOutcome.unknown => l10n.reportOutcomeUnknown,
 };
 
-String reportStatusLabel(ReportStatus status) => switch (status) {
-  ReportStatus.open => ReportStrings.statusOpen,
-  ReportStatus.assigned => ReportStrings.statusAssigned,
-  ReportStatus.resolved => ReportStrings.statusResolved,
-  ReportStatus.dismissed => ReportStrings.statusDismissed,
-  ReportStatus.unknown => ReportStrings.statusUnknown,
-};
-
-String resolutionOutcomeLabel(ResolutionOutcome outcome) => switch (outcome) {
-  ResolutionOutcome.dismiss => ReportStrings.outcomeDismiss,
-  ResolutionOutcome.warn => ReportStrings.outcomeWarn,
-  ResolutionOutcome.mute => ReportStrings.outcomeMute,
-  ResolutionOutcome.removeContent => ReportStrings.outcomeRemoveContent,
-  ResolutionOutcome.ban => ReportStrings.outcomeBan,
-  ResolutionOutcome.escalate => ReportStrings.outcomeEscalate,
-  ResolutionOutcome.unknown => ReportStrings.outcomeUnknown,
-};
-
-String reportErrorText(Object error) {
+String reportErrorText(AppLocalizations l10n, Object error) {
   final code = error is ApiException ? error.code : null;
   return switch (code) {
-    'network_error' => ReportStrings.networkError,
-    'invalid_report_target' => ReportStrings.invalidTargetError,
-    'message_required' => ReportStrings.messageRequiredError,
-    'report_not_found' ||
-    'message_not_found' => ReportStrings.reportNotFoundError,
-    'moderator_conflict' => ReportStrings.moderatorConflictError,
-    'report_already_assigned' => ReportStrings.alreadyAssignedError,
-    'report_grant_required' => ReportStrings.evidenceExpired,
-    'report_closed' => ReportStrings.reportClosedError,
-    'unsafe_ban_target' => ReportStrings.unsafeBanError,
-    'forbidden' => ReportStrings.forbiddenError,
-    _ => ReportStrings.genericError,
+    'invalid_report_target' => l10n.reportInvalidTargetError,
+    'message_required' => l10n.reportMessageRequiredError,
+    'report_not_found' || 'message_not_found' => l10n.reportNotFoundError,
+    'moderator_conflict' => l10n.reportModeratorConflictError,
+    'report_already_assigned' => l10n.reportAlreadyAssignedError,
+    'report_grant_required' => l10n.reportEvidenceExpired,
+    'report_closed' => l10n.reportClosedError,
+    'unsafe_ban_target' => l10n.reportUnsafeBanError,
+    _ => localizedApiError(l10n, code),
   };
 }
 
@@ -55,7 +58,7 @@ String reportDateTime(BuildContext context, DateTime date) {
     TimeOfDay.fromDateTime(local),
     alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
   );
-  return '$day, $time';
+  return context.l10n.dateAndTime(day, time);
 }
 
 String shortIdentifier(String value) {
@@ -103,7 +106,7 @@ class ReportErrorPanel extends StatelessWidget {
                 style: TextButton.styleFrom(
                   foregroundColor: scheme.onErrorContainer,
                 ),
-                child: const Text(ReportStrings.retry),
+                child: Text(context.l10n.retry),
               ),
           ],
         ),

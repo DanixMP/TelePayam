@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:university_messenger/features/calls/data/call_media_adapter.dart';
 import 'package:university_messenger/features/calls/domain/call_models.dart';
 import 'package:university_messenger/features/calls/presentation/call_controller.dart';
 import 'package:university_messenger/features/calls/presentation/call_strings.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class CallErrorBanner extends StatelessWidget {
   const CallErrorBanner({
@@ -18,16 +20,14 @@ class CallErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return MaterialBanner(
       leading: const Icon(Icons.error_outline_rounded),
-      content: Text(CallStrings.errorFor(failure.code)),
+      content: Text(callErrorLabel(l10n, failure.code)),
       actions: [
         if (onRetry != null)
-          TextButton(onPressed: onRetry, child: const Text(CallStrings.retry)),
-        TextButton(
-          onPressed: onDismiss,
-          child: const Text(CallStrings.dismiss),
-        ),
+          TextButton(onPressed: onRetry, child: Text(l10n.retry)),
+        TextButton(onPressed: onDismiss, child: Text(l10n.dismiss)),
       ],
     );
   }
@@ -42,7 +42,7 @@ class CallIdentity extends StatelessWidget {
     super.key,
   });
 
-  final String name;
+  final String? name;
   final String status;
   final bool video;
   final bool large;
@@ -50,9 +50,14 @@ class CallIdentity extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
+    final displayName = name?.trim().isNotEmpty == true
+        ? name!
+        : l10n.callUnknownCaller;
     final avatarSize = large ? 124.0 : 88.0;
     return Semantics(
-      label: '$name, $status',
+      label: l10n.callIdentity(displayName, status),
+      excludeSemantics: true,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -71,7 +76,7 @@ class CallIdentity extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           Text(
-            name,
+            displayName,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
@@ -102,24 +107,22 @@ class ActiveCallBody extends StatelessWidget {
   });
 
   final CallController controller;
-  final String peerName;
+  final String? peerName;
   final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final state = controller.state;
     final call = state.currentCall;
     if (call == null) {
-      return _FinishedCall(
-        title: CallStrings.callUnavailable,
-        onClose: onClose,
-      );
+      return _FinishedCall(title: l10n.callCallUnavailable, onClose: onClose);
     }
     if (call.status == CallStatus.declined || call.status == CallStatus.ended) {
       return _FinishedCall(
         title: call.status == CallStatus.declined
-            ? CallStrings.declined
-            : CallStrings.callEnded,
+            ? l10n.callDeclined
+            : l10n.callCallEnded,
         onClose: onClose,
       );
     }
@@ -128,8 +131,11 @@ class ActiveCallBody extends StatelessWidget {
     final video = call.kind == CallKind.video;
     final active = call.status == CallStatus.active;
     final status = active
-        ? _connectionLabel(media.connection, state.elapsed)
-        : CallStrings.ringing;
+        ? _connectionLabel(context, media.connection, state.elapsed)
+        : l10n.callRinging;
+    final name = peerName?.trim().isNotEmpty == true
+        ? peerName!
+        : l10n.callUnknownCaller;
 
     return ColoredBox(
       color: video
@@ -138,7 +144,7 @@ class ActiveCallBody extends StatelessWidget {
       child: SafeArea(
         child: Column(
           children: [
-            _CallTopBar(title: peerName, status: status, onClose: onClose),
+            _CallTopBar(title: name, status: status, onClose: onClose),
             if (state.failure != null)
               CallErrorBanner(
                 failure: state.failure!,
@@ -147,15 +153,13 @@ class ActiveCallBody extends StatelessWidget {
               ),
             Expanded(
               child: video
-                  ? _VideoStage(controller: controller, peerName: peerName)
+                  ? _VideoStage(controller: controller, peerName: name)
                   : Center(
                       child: Padding(
                         padding: const EdgeInsets.all(32),
                         child: CallIdentity(
-                          name: peerName,
-                          status: active
-                              ? status
-                              : CallStrings.waitingForAnswer,
+                          name: name,
+                          status: active ? status : l10n.callWaitingForAnswer,
                           large: true,
                         ),
                       ),
@@ -188,7 +192,7 @@ class _CallTopBar extends StatelessWidget {
         children: [
           IconButton(
             onPressed: onClose,
-            tooltip: CallStrings.close,
+            tooltip: context.l10n.close,
             icon: const Icon(Icons.arrow_back_rounded),
           ),
           const SizedBox(width: 4),
@@ -241,7 +245,7 @@ class _VideoStage extends StatelessWidget {
               placeholder: Center(
                 child: CallIdentity(
                   name: peerName,
-                  status: CallStrings.waitingForVideo,
+                  status: context.l10n.callWaitingForVideo,
                   large: constraints.maxHeight > 480,
                   video: true,
                 ),
@@ -295,6 +299,7 @@ class _CallControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = controller.media;
+    final l10n = context.l10n;
     return Material(
       color: Theme.of(context).colorScheme.surface,
       child: SafeArea(
@@ -311,8 +316,8 @@ class _CallControls extends StatelessWidget {
                     ? Icons.mic_rounded
                     : Icons.mic_off_rounded,
                 label: media.microphoneEnabled
-                    ? CallStrings.microphoneOn
-                    : CallStrings.microphoneOff,
+                    ? l10n.callMicrophoneOn
+                    : l10n.callMicrophoneOff,
                 selected: !media.microphoneEnabled,
                 enabled: active,
                 onPressed: () =>
@@ -323,8 +328,8 @@ class _CallControls extends StatelessWidget {
                     ? Icons.volume_up_rounded
                     : Icons.hearing_rounded,
                 label: media.speakerEnabled
-                    ? CallStrings.speakerOn
-                    : CallStrings.speakerOff,
+                    ? l10n.callSpeakerOn
+                    : l10n.callSpeakerOff,
                 selected: media.speakerEnabled,
                 enabled: active,
                 onPressed: () =>
@@ -336,8 +341,8 @@ class _CallControls extends StatelessWidget {
                       ? Icons.videocam_rounded
                       : Icons.videocam_off_rounded,
                   label: media.cameraEnabled
-                      ? CallStrings.cameraOn
-                      : CallStrings.cameraOff,
+                      ? l10n.callCameraOn
+                      : l10n.callCameraOff,
                   selected: !media.cameraEnabled,
                   enabled: active,
                   onPressed: () =>
@@ -346,13 +351,13 @@ class _CallControls extends StatelessWidget {
               if (video && media.cameraEnabled)
                 CallControlButton(
                   icon: Icons.cameraswitch_rounded,
-                  label: CallStrings.switchCamera,
+                  label: l10n.callSwitchCamera,
                   enabled: active,
                   onPressed: controller.switchCamera,
                 ),
               CallControlButton(
                 icon: Icons.call_end_rounded,
-                label: CallStrings.endCall,
+                label: l10n.callEndCall,
                 destructive: true,
                 enabled: !controller.state.isBusy,
                 onPressed: controller.endCurrent,
@@ -449,7 +454,7 @@ class _FinishedCall extends StatelessWidget {
                 const SizedBox(height: 24),
                 FilledButton(
                   onPressed: onClose,
-                  child: const Text(CallStrings.close),
+                  child: Text(context.l10n.close),
                 ),
               ],
             ),
@@ -460,20 +465,26 @@ class _FinishedCall extends StatelessWidget {
   }
 }
 
-String _connectionLabel(CallMediaConnection connection, Duration elapsed) =>
-    switch (connection) {
-      CallMediaConnection.connecting => CallStrings.connecting,
-      CallMediaConnection.reconnecting => CallStrings.reconnecting,
-      CallMediaConnection.connected => formatCallDuration(elapsed),
-      CallMediaConnection.failed => CallStrings.mediaConnectionError,
-      CallMediaConnection.disconnected => CallStrings.connecting,
-    };
+String _connectionLabel(
+  BuildContext context,
+  CallMediaConnection connection,
+  Duration elapsed,
+) => switch (connection) {
+  CallMediaConnection.connecting ||
+  CallMediaConnection.disconnected => context.l10n.callConnecting,
+  CallMediaConnection.reconnecting => context.l10n.callReconnecting,
+  CallMediaConnection.connected => formatCallDuration(context, elapsed),
+  CallMediaConnection.failed => context.l10n.callMediaConnectionError,
+};
 
-String formatCallDuration(Duration duration) {
+String formatCallDuration(BuildContext context, Duration duration) {
+  final locale = context.l10n.localeName;
+  final padded = NumberFormat('00', locale);
+  final whole = NumberFormat('0', locale);
   final hours = duration.inHours;
-  final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+  final minutes = padded.format(duration.inMinutes.remainder(60));
+  final seconds = padded.format(duration.inSeconds.remainder(60));
   return hours > 0
-      ? '$hours:$minutes:$seconds'
-      : '${duration.inMinutes}:$seconds';
+      ? '${whole.format(hours)}:$minutes:$seconds'
+      : '${whole.format(duration.inMinutes)}:$seconds';
 }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:university_messenger/app/theme/app_tokens.dart';
-import 'package:university_messenger/core/network/api_exception.dart';
 import 'package:university_messenger/features/services/domain/service_models.dart';
-import 'package:university_messenger/features/services/presentation/service_strings.dart';
+import 'package:university_messenger/l10n/generated/app_localizations.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class ServiceStatusChip extends StatelessWidget {
   const ServiceStatusChip({required this.status, super.key});
@@ -43,7 +43,7 @@ class ServiceStatusChip extends StatelessWidget {
     };
     return Chip(
       avatar: Icon(icon, size: 18, color: foreground),
-      label: Text(serviceStatusLabel(status)),
+      label: Text(serviceStatusLabel(context.l10n, status)),
       labelStyle: TextStyle(color: foreground, fontWeight: FontWeight.w700),
       backgroundColor: background,
       side: BorderSide.none,
@@ -114,11 +114,11 @@ class ServiceErrorState extends StatelessWidget {
   Widget build(BuildContext context) => ServiceEmptyState(
     icon: Icons.cloud_off_rounded,
     title: title,
-    body: serviceErrorMessage(error),
+    body: serviceErrorMessage(context.l10n, error),
     action: FilledButton.tonalIcon(
       onPressed: onRetry,
       icon: const Icon(Icons.refresh_rounded),
-      label: const Text(ServiceStrings.retry),
+      label: Text(context.l10n.retry),
     ),
   );
 }
@@ -153,47 +153,66 @@ class ServiceSection extends StatelessWidget {
   );
 }
 
-String serviceStatusLabel(ServiceRequestStatus status) => switch (status) {
-  ServiceRequestStatus.draft => ServiceStrings.draft,
-  ServiceRequestStatus.submitted => ServiceStrings.submitted,
-  ServiceRequestStatus.inReview => ServiceStrings.inReview,
-  ServiceRequestStatus.needsInfo => ServiceStrings.needsInfo,
-  ServiceRequestStatus.approved => ServiceStrings.approved,
-  ServiceRequestStatus.rejected => ServiceStrings.rejected,
-  ServiceRequestStatus.readyForPickup => ServiceStrings.readyForPickup,
-  ServiceRequestStatus.deliveredDigitally => ServiceStrings.deliveredDigitally,
-  ServiceRequestStatus.completed => ServiceStrings.completed,
-  ServiceRequestStatus.cancelled => ServiceStrings.cancelled,
-  ServiceRequestStatus.unknown => ServiceStrings.unknownStatus,
-};
+String serviceStatusLabel(AppLocalizations l10n, ServiceRequestStatus status) =>
+    switch (status) {
+      ServiceRequestStatus.draft => l10n.serviceDraft,
+      ServiceRequestStatus.submitted => l10n.submitted,
+      ServiceRequestStatus.inReview => l10n.serviceInReview,
+      ServiceRequestStatus.needsInfo => l10n.serviceNeedsInfo,
+      ServiceRequestStatus.approved => l10n.serviceApproved,
+      ServiceRequestStatus.rejected => l10n.serviceRejected,
+      ServiceRequestStatus.readyForPickup => l10n.serviceReadyForPickup,
+      ServiceRequestStatus.deliveredDigitally => l10n.serviceDeliveredDigitally,
+      ServiceRequestStatus.completed => l10n.serviceCompleted,
+      ServiceRequestStatus.cancelled => l10n.serviceCancelled,
+      ServiceRequestStatus.unknown => l10n.serviceUnknownStatus,
+    };
 
-String serviceEventLabel(String kind) {
+String serviceEventLabel(AppLocalizations l10n, String kind) {
   if (kind.startsWith('status:')) {
     final status = ServiceRequestStatus.fromJson(kind.substring(7));
-    return '${ServiceStrings.eventStatusChanged}: ${serviceStatusLabel(status)}';
+    return l10n.serviceEventStatusChanged(serviceStatusLabel(l10n, status));
   }
   return switch (kind) {
-    'submitted' => ServiceStrings.eventSubmitted,
-    'claimed' => ServiceStrings.eventClaimed,
-    'result_uploaded' => ServiceStrings.eventResultUploaded,
-    'cancelled' => ServiceStrings.eventCancelled,
-    _ =>
-      kind
-          .replaceAll('_', ' ')
-          .split(' ')
-          .map(
-            (part) => part.isEmpty
-                ? part
-                : '${part[0].toUpperCase()}${part.substring(1)}',
-          )
-          .join(' '),
+    'submitted' => l10n.serviceRequestSubmitted,
+    'claimed' => l10n.serviceEventClaimed,
+    'result_uploaded' => l10n.serviceEventResultUploaded,
+    'cancelled' => l10n.serviceRequestCancelled,
+    _ => l10n.serviceUnknownEvent,
   };
 }
 
-String serviceErrorMessage(Object error) => switch (error) {
-  ApiException(:final detail) when detail.isNotEmpty => detail,
-  _ => ServiceStrings.actionError,
-};
+String serviceErrorMessage(AppLocalizations l10n, Object error) {
+  final code = apiErrorCode(error);
+  return switch (code) {
+    'service_request_not_found' => l10n.serviceRequestMissing,
+    'service_type_not_found' => l10n.serviceTypeMissing,
+    'service_requirements_missing' => l10n.serviceRequirementsMissing,
+    'invalid_document' ||
+    'invalid_result_document' ||
+    'invalid_attachment' => l10n.serviceDocumentUnavailable,
+    'already_assigned' => l10n.serviceAlreadyAssigned,
+    'invalid_status_transition' => l10n.serviceInvalidTransition,
+    'request_not_cancellable' => l10n.serviceCannotCancel,
+    _ => localizedMediaError(l10n, error, localizedApiError(l10n, code)),
+  };
+}
+
+String serviceFieldLabel(AppLocalizations l10n, String key) =>
+    switch (key.toLowerCase()) {
+      'name' || 'full_name' => l10n.name,
+      'first_name' => l10n.firstName,
+      'last_name' => l10n.lastName,
+      'student_id' || 'university_id' => l10n.universityId,
+      'national_id' => l10n.nationalId,
+      'department' => l10n.department,
+      'degree' => l10n.degree,
+      'phone' || 'phone_number' => l10n.phoneLabel,
+      'email' => l10n.serviceEmail,
+      'date' => l10n.serviceDate,
+      'note' || 'notes' => l10n.serviceNote,
+      _ => l10n.serviceFieldIdentifier('\u2068$key\u2069'),
+    };
 
 String formatServiceDate(BuildContext context, DateTime value) {
   final local = value.toLocal();
@@ -202,11 +221,7 @@ String formatServiceDate(BuildContext context, DateTime value) {
     TimeOfDay.fromDateTime(local),
     alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
   );
-  return '$date, $time';
+  return context.l10n.dateAndTime(date, time);
 }
 
 String shortId(String id) => id.length > 8 ? id.substring(0, 8) : id;
-
-bool isUuid(String value) => RegExp(
-  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
-).hasMatch(value.trim());

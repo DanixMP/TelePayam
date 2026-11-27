@@ -6,13 +6,6 @@ import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/core/media/media_thumbnail.dart';
 import 'package:university_messenger/l10n/localization_extensions.dart';
 
-const photoTypes = XTypeGroup(
-  label: 'Photo',
-  extensions: ['jpg', 'jpeg', 'png', 'webp'],
-  mimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
-  uniformTypeIdentifiers: ['public.image'],
-);
-
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
   @override
@@ -21,7 +14,7 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileState extends ConsumerState<ProfileScreen> {
   bool busy = false;
-  String? error;
+  ({Object cause, bool removing})? error;
 
   Future<void> changePhoto({bool remove = false}) async {
     if (busy) return;
@@ -32,7 +25,16 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
     try {
       String? id;
       if (!remove) {
-        final file = await openFile(acceptedTypeGroups: [photoTypes]);
+        final file = await openFile(
+          acceptedTypeGroups: [
+            XTypeGroup(
+              label: context.l10n.photo,
+              extensions: const ['jpg', 'jpeg', 'png', 'webp'],
+              mimeTypes: const ['image/jpeg', 'image/png', 'image/webp'],
+              uniformTypeIdentifiers: const ['public.image'],
+            ),
+          ],
+        );
         if (file == null || !mounted) return;
         final media = await ref.read(mediaClientProvider).upload(file);
         id = media.id;
@@ -44,8 +46,8 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
           .dio
           .patch('/users/me', data: {'avatar_id': id});
       if (!await auth.refreshStatus()) throw StateError('Refresh failed');
-    } catch (_) {
-      if (mounted) setState(() => error = context.l10n.photoUpdateError);
+    } catch (cause) {
+      if (mounted) setState(() => error = (cause: cause, removing: remove));
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -80,6 +82,9 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
                       account.displayName.isEmpty
                           ? account.phone
                           : account.displayName,
+                      textDirection: account.displayName.isEmpty
+                          ? TextDirection.ltr
+                          : null,
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
@@ -97,9 +102,15 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
                             : () => changePhoto(remove: true),
                         child: Text(l.removePhoto),
                       ),
-                    if (error != null)
+                    if (error case final failure?)
                       Text(
-                        error!,
+                        localizedMediaError(
+                          l,
+                          failure.cause,
+                          failure.removing
+                              ? l.photoRemoveError
+                              : l.photoUpdateError,
+                        ),
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.error,
                         ),

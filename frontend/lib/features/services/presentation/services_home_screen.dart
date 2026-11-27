@@ -4,10 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/features/auth/domain/account.dart';
 import 'package:university_messenger/features/services/domain/service_models.dart';
-import 'package:university_messenger/features/services/presentation/service_strings.dart';
 import 'package:university_messenger/features/services/presentation/service_widgets.dart';
 import 'package:university_messenger/features/services/services_providers.dart';
 import 'package:university_messenger/features/services/services_routes.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class ServicesHomeScreen extends ConsumerStatefulWidget {
   const ServicesHomeScreen({super.key});
@@ -21,16 +21,17 @@ class _ServicesHomeScreenState extends ConsumerState<ServicesHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     ref.watch(serviceRealtimeSyncProvider);
     final role = ref.watch(authControllerProvider).state.account?.role;
     if (role == UserRole.staff) return const StaffQueueScreen();
     if (role != UserRole.student) {
-      return const Scaffold(
-        appBar: _ServicesAppBar(title: ServiceStrings.services),
+      return Scaffold(
+        appBar: _ServicesAppBar(title: l10n.services),
         body: ServiceEmptyState(
           icon: Icons.lock_outline_rounded,
-          title: ServiceStrings.services,
-          body: ServiceStrings.unsupportedRole,
+          title: l10n.services,
+          body: l10n.serviceUnsupportedRole,
         ),
       );
     }
@@ -42,20 +43,20 @@ class _ServicesHomeScreenState extends ConsumerState<ServicesHomeScreen> {
         onBrowseCatalog: () => setState(() => _selectedIndex = 0),
       ),
     ];
-    final destinations = const [
+    final destinations = [
       NavigationRailDestination(
-        icon: Icon(Icons.widgets_outlined),
-        selectedIcon: Icon(Icons.widgets_rounded),
-        label: Text(ServiceStrings.serviceCatalog),
+        icon: const Icon(Icons.widgets_outlined),
+        selectedIcon: const Icon(Icons.widgets_rounded),
+        label: Text(l10n.serviceCatalog),
       ),
       NavigationRailDestination(
-        icon: Icon(Icons.receipt_long_outlined),
-        selectedIcon: Icon(Icons.receipt_long_rounded),
-        label: Text(ServiceStrings.myRequests),
+        icon: const Icon(Icons.receipt_long_outlined),
+        selectedIcon: const Icon(Icons.receipt_long_rounded),
+        label: Text(l10n.serviceMyRequests),
       ),
     ];
     return Scaffold(
-      appBar: const _ServicesAppBar(title: ServiceStrings.services),
+      appBar: _ServicesAppBar(title: l10n.services),
       body: SafeArea(
         top: false,
         child: wide
@@ -83,16 +84,16 @@ class _ServicesHomeScreenState extends ConsumerState<ServicesHomeScreen> {
           ? null
           : NavigationBar(
               selectedIndex: _selectedIndex,
-              destinations: const [
+              destinations: [
                 NavigationDestination(
-                  icon: Icon(Icons.widgets_outlined),
-                  selectedIcon: Icon(Icons.widgets_rounded),
-                  label: ServiceStrings.serviceCatalog,
+                  icon: const Icon(Icons.widgets_outlined),
+                  selectedIcon: const Icon(Icons.widgets_rounded),
+                  label: l10n.serviceCatalog,
                 ),
                 NavigationDestination(
-                  icon: Icon(Icons.receipt_long_outlined),
-                  selectedIcon: Icon(Icons.receipt_long_rounded),
-                  label: ServiceStrings.myRequests,
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  selectedIcon: const Icon(Icons.receipt_long_rounded),
+                  label: l10n.serviceMyRequests,
                 ),
               ],
               onDestinationSelected: (index) =>
@@ -107,20 +108,21 @@ class ServiceCatalogScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final catalog = ref.watch(serviceCatalogProvider);
     return catalog.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => ServiceErrorState(
-        title: ServiceStrings.loadServicesError,
+        title: l10n.serviceLoadServicesError,
         error: error,
         onRetry: () => ref.invalidate(serviceCatalogProvider),
       ),
       data: (services) {
         if (services.isEmpty) {
-          return const ServiceEmptyState(
+          return ServiceEmptyState(
             icon: Icons.widgets_outlined,
-            title: ServiceStrings.noServices,
-            body: ServiceStrings.noServicesBody,
+            title: l10n.serviceNoServices,
+            body: l10n.serviceNoServicesBody,
           );
         }
         return RefreshIndicator(
@@ -132,7 +134,7 @@ class ServiceCatalogScreen extends ConsumerWidget {
                 padding: const EdgeInsetsDirectional.fromSTEB(24, 24, 24, 12),
                 sliver: SliverToBoxAdapter(
                   child: Text(
-                    ServiceStrings.serviceCatalog,
+                    l10n.serviceCatalog,
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                 ),
@@ -174,6 +176,7 @@ class _ServiceCatalogItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -204,7 +207,7 @@ class _ServiceCatalogItem extends StatelessWidget {
               const SizedBox(height: 6),
               Expanded(
                 child: Text(
-                  service.description ?? ServiceStrings.fieldHelp,
+                  service.description ?? l10n.serviceFieldHelp,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -212,9 +215,9 @@ class _ServiceCatalogItem extends StatelessWidget {
                   ),
                 ),
               ),
-              if (service.slaHours != null)
+              if (service.slaHours case final hours?)
                 Text(
-                  '${ServiceStrings.estimatedTime}: ${service.slaHours} ${ServiceStrings.hours}',
+                  l10n.serviceEstimatedTime(hours),
                   style: Theme.of(
                     context,
                   ).textTheme.labelMedium?.copyWith(color: scheme.primary),
@@ -234,12 +237,13 @@ class StudentRequestListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final requests = ref.watch(serviceRequestsProvider);
     final catalog = ref.watch(serviceCatalogProvider).valueOrNull ?? const [];
     return requests.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => ServiceErrorState(
-        title: ServiceStrings.loadRequestsError,
+        title: l10n.serviceLoadRequestsError,
         error: error,
         onRetry: () => ref.invalidate(serviceRequestsProvider),
       ),
@@ -247,18 +251,18 @@ class StudentRequestListScreen extends ConsumerWidget {
         if (items.isEmpty) {
           return ServiceEmptyState(
             icon: Icons.receipt_long_outlined,
-            title: ServiceStrings.noRequests,
-            body: ServiceStrings.noRequestsBody,
+            title: l10n.serviceNoRequests,
+            body: l10n.serviceNoRequestsBody,
             action: FilledButton.icon(
               onPressed:
                   onBrowseCatalog ?? () => context.push(ServiceRoutes.root),
               icon: const Icon(Icons.add_rounded),
-              label: const Text(ServiceStrings.newRequest),
+              label: Text(l10n.serviceNewRequest),
             ),
           );
         }
         return _RequestList(
-          title: ServiceStrings.myRequests,
+          title: l10n.serviceMyRequests,
           requests: items,
           catalog: catalog,
           onRefresh: () => ref.refresh(serviceRequestsProvider.future),
@@ -288,15 +292,15 @@ class _StaffQueueScreenState extends ConsumerState<StaffQueueScreen> {
       ref.invalidate(serviceRequestsProvider);
       ref.invalidate(serviceRequestDetailProvider(request.id));
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text(ServiceStrings.claimed)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.serviceRequestClaimed)),
+      );
       await context.push(ServiceRoutes.requestDetail(request.id));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(serviceErrorMessage(error))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(serviceErrorMessage(context.l10n, error))),
+      );
     } finally {
       if (mounted) setState(() => _claimingId = null);
     }
@@ -304,10 +308,11 @@ class _StaffQueueScreenState extends ConsumerState<StaffQueueScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final requests = ref.watch(serviceRequestsProvider);
     final catalog = ref.watch(serviceCatalogProvider).valueOrNull ?? const [];
     return Scaffold(
-      appBar: const _ServicesAppBar(title: ServiceStrings.staffQueue),
+      appBar: _ServicesAppBar(title: l10n.serviceStaffQueue),
       body: SafeArea(
         top: false,
         child: Column(
@@ -316,16 +321,16 @@ class _StaffQueueScreenState extends ConsumerState<StaffQueueScreen> {
               padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 16, 8),
               child: SegmentedButton<int>(
                 expandedInsets: EdgeInsets.zero,
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: 0,
-                    icon: Icon(Icons.inbox_outlined),
-                    label: Text(ServiceStrings.available),
+                    icon: const Icon(Icons.inbox_outlined),
+                    label: Text(l10n.serviceAvailable),
                   ),
                   ButtonSegment(
                     value: 1,
-                    icon: Icon(Icons.assignment_ind_outlined),
-                    label: Text(ServiceStrings.assignedToMe),
+                    icon: const Icon(Icons.assignment_ind_outlined),
+                    label: Text(l10n.serviceAssignedToMe),
                   ),
                 ],
                 selected: {_tab},
@@ -337,7 +342,7 @@ class _StaffQueueScreenState extends ConsumerState<StaffQueueScreen> {
               child: requests.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, _) => ServiceErrorState(
-                  title: ServiceStrings.loadRequestsError,
+                  title: l10n.serviceLoadRequestsError,
                   error: error,
                   onRetry: () => ref.invalidate(serviceRequestsProvider),
                 ),
@@ -355,11 +360,11 @@ class _StaffQueueScreenState extends ConsumerState<StaffQueueScreen> {
                           ? Icons.inbox_outlined
                           : Icons.assignment_ind_outlined,
                       title: _tab == 0
-                          ? ServiceStrings.noQueue
-                          : ServiceStrings.noAssigned,
+                          ? l10n.serviceNoQueue
+                          : l10n.serviceNoAssigned,
                       body: _tab == 0
-                          ? ServiceStrings.noQueueBody
-                          : ServiceStrings.noAssignedBody,
+                          ? l10n.serviceNoQueueBody
+                          : l10n.serviceNoAssignedBody,
                     );
                   }
                   return _RequestList(
@@ -383,7 +388,7 @@ class _StaffQueueScreenState extends ConsumerState<StaffQueueScreen> {
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : const Text(ServiceStrings.claim),
+                                : Text(l10n.serviceClaimRequest),
                           ),
                   );
                 },
@@ -446,7 +451,8 @@ class _RequestList extends StatelessWidget {
               child: const Icon(Icons.description_outlined),
             ),
             title: Text(
-              names[request.serviceTypeId] ?? ServiceStrings.unknownService,
+              names[request.serviceTypeId] ??
+                  context.l10n.serviceUnknownService,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.w700),

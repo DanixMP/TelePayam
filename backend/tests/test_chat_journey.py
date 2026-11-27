@@ -66,6 +66,8 @@ async def test_profile_directory_and_rich_messages_between_accounts(
     assert (await client.get(f"{API}/media/{photo}", headers=auth(b))).content == png
     ab = await dm(b, a)
     assert ab["title"] == "Mina Example" and ab["avatar_id"] == photo
+    assert ab["is_saved_messages"] is False
+    assert (await dm(a, a))["is_saved_messages"] is True
     assert (await dm(a, b))["id"] == ab["id"]
     ab = ab["id"]
     bc = (await dm(b, c))["id"]
@@ -118,9 +120,28 @@ async def test_profile_directory_and_rich_messages_between_accounts(
     assert (await send(b, bc, type="sticker", attachment_ids=[photo])).status_code == 201
     history = (await client.get(f"{API}/conversations/{bc}/messages", headers=auth(c))).json()
     assert [item["type"] for item in history] == ["file", "animation", "sticker"]
-    assert (await client.get(API + "/conversations", headers=auth(c))).json()[0][
-        "last_message_body"
-    ] == "Sticker"
+
+    async def preview():
+        return (await client.get(f"{API}/conversations/{bc}", headers=auth(c))).json()
+
+    latest = await preview()
+    assert (latest["last_message_body"], latest["last_message_type"]) == ("Sticker", "sticker")
+    authored = await send(b, bc, body="Sticker")
+    assert authored.status_code == 201
+    message_url = f"{API}/messages/{authored.json()['id']}"
+    latest = await preview()
+    assert (latest["last_message_body"], latest["last_message_type"]) == ("Sticker", None)
+    assert latest["last_message_edited_at"] is None
+    edit = await client.patch(message_url, headers=auth(b), json={"body": "Revised"})
+    assert edit.status_code == 200
+    revised = await preview()
+    assert revised["last_seq"] == latest["last_seq"]
+    assert revised["last_message_body"] == "Revised"
+    assert revised["last_message_edited_at"] == edit.json()["edited_at"]
+    assert (await client.delete(message_url, headers=auth(b))).status_code == 204
+    latest = await preview()
+    assert latest["last_message_body"] == "Message deleted"
+    assert latest["last_message_type"] == "deleted"
     outsider.status = "pending_approval"
     await db.commit()
     assert (await client.get(API + "/search", headers=auth(a), params={"q": "parsa"})).json() == []

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class VerificationThread extends StatelessWidget {
   const VerificationThread({
@@ -17,10 +18,13 @@ class VerificationThread extends StatelessWidget {
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 320);
+    final step = currentStep.clamp(0, steps.length - 1);
     return Semantics(
-      label:
-          '${steps[currentStep.clamp(0, steps.length - 1)]}, '
-          '${currentStep + 1} of ${steps.length}',
+      label: context.l10n.verificationProgress(
+        steps[step],
+        step + 1,
+        steps.length,
+      ),
       child: ExcludeSemantics(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -68,7 +72,7 @@ class VerificationThread extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              steps[currentStep.clamp(0, steps.length - 1)],
+              steps[step],
               style: Theme.of(
                 context,
               ).textTheme.labelLarge?.copyWith(color: threadColor),

@@ -1,11 +1,13 @@
 {
-    "name": "university_messenger",
-    "short_name": "university_messenger",
+    "name": "پیام‌رسان دانشگاه",
+    "short_name": "پیام‌رسان",
+    "lang": "fa",
+    "dir": "rtl",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "پیام‌رسانی با هویت تأییدشده، خدمات دانشگاهی و کانال‌های آموزشی.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

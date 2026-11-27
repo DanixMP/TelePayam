@@ -6,10 +6,10 @@ import 'package:university_messenger/app/providers.dart';
 import 'package:university_messenger/core/media/authenticated_media.dart';
 import 'package:university_messenger/features/auth/domain/account.dart';
 import 'package:university_messenger/features/services/domain/service_models.dart';
-import 'package:university_messenger/features/services/presentation/service_strings.dart';
 import 'package:university_messenger/features/services/presentation/service_widgets.dart';
 import 'package:university_messenger/features/services/services_providers.dart';
 import 'package:university_messenger/features/services/services_routes.dart';
+import 'package:university_messenger/l10n/localization_extensions.dart';
 
 class ServiceRequestDetailScreen extends ConsumerStatefulWidget {
   const ServiceRequestDetailScreen({required this.requestId, super.key});
@@ -27,7 +27,7 @@ class _ServiceRequestDetailScreenState
 
   Future<void> _runAction(
     Future<void> Function() action, {
-    String? successMessage,
+    String Function(BuildContext)? successMessage,
   }) async {
     setState(() => _acting = true);
     try {
@@ -37,13 +37,13 @@ class _ServiceRequestDetailScreenState
       if (successMessage != null && mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(successMessage)));
+        ).showSnackBar(SnackBar(content: Text(successMessage(context))));
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(serviceErrorMessage(error))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(serviceErrorMessage(context.l10n, error))),
+      );
     } finally {
       if (mounted) setState(() => _acting = false);
     }
@@ -53,16 +53,16 @@ class _ServiceRequestDetailScreenState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text(ServiceStrings.cancellationTitle),
-        content: const Text(ServiceStrings.cancellationBody),
+        title: Text(context.l10n.serviceCancellationTitle),
+        content: Text(context.l10n.serviceCancellationBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text(ServiceStrings.keepRequest),
+            child: Text(context.l10n.serviceKeepRequest),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text(ServiceStrings.cancelRequest),
+            child: Text(context.l10n.serviceCancelRequest),
           ),
         ],
       ),
@@ -70,7 +70,7 @@ class _ServiceRequestDetailScreenState
     if (confirmed != true) return;
     await _runAction(() async {
       await ref.read(servicesApiProvider).cancel(widget.requestId);
-    }, successMessage: ServiceStrings.requestCancelled);
+    }, successMessage: (context) => context.l10n.serviceRequestCancelled);
   }
 
   Future<void> _changeStatus(ServiceRequestDetail detail) async {
@@ -91,11 +91,11 @@ class _ServiceRequestDetailScreenState
 
   Future<void> _associateResult(ServiceRequestDetail detail) async {
     final file = await openFile(
-      acceptedTypeGroups: const [
-        XTypeGroup(label: 'PDF documents', extensions: ['pdf']),
+      acceptedTypeGroups: [
+        XTypeGroup(label: context.l10n.pdfDocuments, extensions: const ['pdf']),
       ],
     );
-    if (file == null) return;
+    if (file == null || !mounted) return;
     await _runAction(() async {
       final media = await ref.read(mediaClientProvider).upload(file);
       await ref
@@ -111,13 +111,13 @@ class _ServiceRequestDetailScreenState
     final catalog = ref.watch(serviceCatalogProvider).valueOrNull ?? const [];
     final role = ref.watch(authControllerProvider).state.account?.role;
     return Scaffold(
-      appBar: AppBar(title: const Text(ServiceStrings.requestDetails)),
+      appBar: AppBar(title: Text(context.l10n.serviceRequestDetails)),
       body: SafeArea(
         top: false,
         child: detail.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => ServiceErrorState(
-            title: ServiceStrings.loadRequestError,
+            title: context.l10n.serviceLoadRequestError,
             error: error,
             onRetry: () =>
                 ref.invalidate(serviceRequestDetailProvider(widget.requestId)),
@@ -196,6 +196,7 @@ class _DetailContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final transitions =
         allowedStaffStatusTransitions[detail.status] ?? const [];
     final regularDocuments = detail.documents
@@ -232,28 +233,28 @@ class _DetailContent extends StatelessWidget {
         ],
         const SizedBox(height: 32),
         ServiceSection(
-          title: ServiceStrings.requestData,
+          title: l10n.serviceRequestData,
           child: _RequestData(detail: detail, service: service),
         ),
         const SizedBox(height: 32),
         ServiceSection(
-          title: ServiceStrings.documents,
+          title: l10n.documents,
           child: regularDocuments.isEmpty
-              ? const Text(ServiceStrings.noDocuments)
+              ? Text(l10n.serviceNoDocuments)
               : _DocumentList(documents: regularDocuments),
         ),
         if (detail.resultDocument != null) ...[
           const SizedBox(height: 32),
           ServiceSection(
-            title: ServiceStrings.resultDocument,
+            title: l10n.serviceResultDocument,
             child: _DocumentList(documents: [detail.resultDocument!]),
           ),
         ],
         const SizedBox(height: 32),
         ServiceSection(
-          title: ServiceStrings.timeline,
+          title: l10n.serviceTimeline,
           child: detail.timeline.isEmpty
-              ? const Text(ServiceStrings.noTimeline)
+              ? Text(l10n.serviceNoTimeline)
               : _Timeline(events: detail.timeline),
         ),
       ],
@@ -272,7 +273,7 @@ class _RequestSummary extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(
-        service?.name ?? ServiceStrings.unknownService,
+        service?.name ?? context.l10n.serviceUnknownService,
         style: Theme.of(context).textTheme.headlineMedium,
       ),
       const SizedBox(height: 10),
@@ -280,32 +281,32 @@ class _RequestSummary extends StatelessWidget {
       const SizedBox(height: 20),
       _InfoLine(
         icon: Icons.tag_rounded,
-        label: ServiceStrings.request,
+        label: context.l10n.serviceRequest,
         value: shortId(detail.id),
         ltrValue: true,
       ),
       _InfoLine(
         icon: Icons.update_rounded,
-        label: ServiceStrings.lastUpdated,
+        label: context.l10n.lastUpdated,
         value: formatServiceDate(context, detail.updatedAt),
       ),
       _InfoLine(
         icon: Icons.assignment_ind_outlined,
-        label: ServiceStrings.assigned,
+        label: context.l10n.status,
         value: detail.isAssigned
-            ? ServiceStrings.assigned
-            : ServiceStrings.unassigned,
+            ? context.l10n.serviceAssigned
+            : context.l10n.unassigned,
       ),
       if (service?.assigneeDepartment.isNotEmpty == true)
         _InfoLine(
           icon: Icons.account_balance_outlined,
-          label: ServiceStrings.department,
+          label: context.l10n.department,
           value: service!.assigneeDepartment,
         ),
       if (detail.verificationCode != null)
         _InfoLine(
           icon: Icons.verified_outlined,
-          label: ServiceStrings.verificationCode,
+          label: context.l10n.codeLabel,
           value: detail.verificationCode!,
           ltrValue: true,
         ),
@@ -388,14 +389,14 @@ class _RequestActions extends StatelessWidget {
       FilledButton.icon(
         onPressed: acting ? null : onChat,
         icon: const Icon(Icons.forum_outlined),
-        label: const Text(ServiceStrings.ticketChat),
+        label: Text(context.l10n.serviceTicketChat),
       ),
       if (isStaff) ...[
         const SizedBox(height: 10),
         OutlinedButton.icon(
           onPressed: acting || !canChangeStatus ? null : onChangeStatus,
           icon: const Icon(Icons.change_circle_outlined),
-          label: const Text(ServiceStrings.changeStatus),
+          label: Text(context.l10n.serviceChangeStatus),
         ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
@@ -403,8 +404,8 @@ class _RequestActions extends StatelessWidget {
           icon: const Icon(Icons.upload_file_outlined),
           label: Text(
             detail.resultDocument == null
-                ? ServiceStrings.associateResult
-                : ServiceStrings.replaceResult,
+                ? context.l10n.serviceAssociateResult
+                : context.l10n.serviceReplaceResult,
           ),
         ),
       ] else if (detail.canCancel) ...[
@@ -412,7 +413,7 @@ class _RequestActions extends StatelessWidget {
         TextButton.icon(
           onPressed: acting ? null : onCancel,
           icon: const Icon(Icons.cancel_outlined),
-          label: const Text(ServiceStrings.cancelRequest),
+          label: Text(context.l10n.serviceCancelRequest),
         ),
       ],
       if (acting) ...[
@@ -431,11 +432,11 @@ class _RequestData extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (detail.data.isEmpty) return const Text(ServiceStrings.noRequestData);
+    if (detail.data.isEmpty) return Text(context.l10n.serviceNoRequestData);
     final labels = {
       for (final field
           in service?.requiredFields ?? const <ServiceFieldDefinition>[])
-        field.key: field.label,
+        field.key: ?field.label,
     };
     return _KeyValueList(values: detail.data, labels: labels);
   }
@@ -458,13 +459,15 @@ class _KeyValueList extends StatelessWidget {
         final entry = indexed.$2;
         final value = entry.value is bool
             ? entry.value as bool
-                  ? ServiceStrings.yes
-                  : ServiceStrings.no
+                  ? context.l10n.yes
+                  : context.l10n.no
             : entry.value.toString();
         return Column(
           children: [
             ListTile(
-              title: Text(labels[entry.key] ?? entry.key),
+              title: Text(
+                labels[entry.key] ?? serviceFieldLabel(context.l10n, entry.key),
+              ),
               subtitle: SelectableText(value),
             ),
             if (indexed.$1 != values.length - 1)
@@ -490,7 +493,9 @@ class _DocumentList extends StatelessWidget {
         .map(
           (document) => AuthenticatedMediaTile(
             mediaId: document.mediaId,
-            label: document.kind,
+            label: document.kind == 'result'
+                ? context.l10n.serviceResultDocument
+                : document.kind,
           ),
         )
         .toList(),
@@ -537,7 +542,7 @@ class _Timeline extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      serviceEventLabel(event.kind),
+                      serviceEventLabel(context.l10n, event.kind),
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     Text(
@@ -589,7 +594,7 @@ class _StatusChangeDialogState extends State<_StatusChangeDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text(ServiceStrings.changeStatus),
+    title: Text(context.l10n.serviceChangeStatus),
     content: SizedBox(
       width: 420,
       child: Column(
@@ -597,12 +602,12 @@ class _StatusChangeDialogState extends State<_StatusChangeDialog> {
         children: [
           DropdownButtonFormField<ServiceRequestStatus>(
             initialValue: _status,
-            decoration: const InputDecoration(labelText: ServiceStrings.status),
+            decoration: InputDecoration(labelText: context.l10n.status),
             items: widget.transitions
                 .map(
                   (status) => DropdownMenuItem(
                     value: status,
-                    child: Text(serviceStatusLabel(status)),
+                    child: Text(serviceStatusLabel(context.l10n, status)),
                   ),
                 )
                 .toList(),
@@ -613,8 +618,8 @@ class _StatusChangeDialogState extends State<_StatusChangeDialog> {
             controller: _note,
             minLines: 2,
             maxLines: 5,
-            decoration: const InputDecoration(
-              labelText: ServiceStrings.optionalNote,
+            decoration: InputDecoration(
+              labelText: context.l10n.serviceOptionalNote,
             ),
           ),
         ],
@@ -623,7 +628,7 @@ class _StatusChangeDialogState extends State<_StatusChangeDialog> {
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text(ServiceStrings.cancel),
+        child: Text(context.l10n.cancel),
       ),
       FilledButton(
         onPressed: () => Navigator.pop(
@@ -633,77 +638,7 @@ class _StatusChangeDialogState extends State<_StatusChangeDialog> {
             _note.text.trim().isEmpty ? null : _note.text.trim(),
           ),
         ),
-        child: const Text(ServiceStrings.updateStatus),
-      ),
-    ],
-  );
-}
-
-class _MediaIdDialog extends StatefulWidget {
-  const _MediaIdDialog({
-    required this.title,
-    required this.help,
-    required this.label,
-  });
-
-  final String title;
-  final String help;
-  final String label;
-
-  @override
-  State<_MediaIdDialog> createState() => _MediaIdDialogState();
-}
-
-class _MediaIdDialogState extends State<_MediaIdDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _mediaId = TextEditingController();
-
-  @override
-  void dispose() {
-    _mediaId.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(widget.title),
-    content: SizedBox(
-      width: 420,
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(widget.help),
-            const SizedBox(height: 14),
-            Directionality(
-              textDirection: TextDirection.ltr,
-              child: TextFormField(
-                controller: _mediaId,
-                autofocus: true,
-                autocorrect: false,
-                enableSuggestions: false,
-                decoration: InputDecoration(labelText: widget.label),
-                validator: (value) =>
-                    isUuid(value ?? '') ? null : ServiceStrings.invalidMediaId,
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text(ServiceStrings.cancel),
-      ),
-      FilledButton(
-        onPressed: () {
-          if (_formKey.currentState?.validate() != true) return;
-          Navigator.pop(context, _mediaId.text.trim());
-        },
-        child: Text(widget.title),
+        child: Text(context.l10n.serviceUpdateStatus),
       ),
     ],
   );
